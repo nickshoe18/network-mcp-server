@@ -1,100 +1,14 @@
+# Real credentials — never commit
+secrets/
+.env
+*.env
+
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-*.egg
-dist/
-build/
-*.whl
-.eggs/
+*.pyc
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-
-# Type checking / linting
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
-
-# Testing
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
+# macOS
 .DS_Store
-Thumbs.db
-
-# Secrets - NEVER commit real secret files
-secrets.json
-secrets/*
-!secrets/*.example
-.env
-.env.*
-!.env.example
-
-# Docker
-docker-compose.override.yml
 
 # Logs
 *.log
-logs/
-
-# Claude Code project config
-.claude/
-
-# Original MCP servers (reference only, not part of this project)
-original-mcp-servers/
-
-# Functions to import (reference code from other projects, not part of this project)
-functions_to_import/
-
-# GSD planning artifacts (internal, not for public repo)
-.planning/
-
-# Internal project docs (not for public repo)
-HANDOFF.md
-TASKS.md
-CLAUDE.md
-
-# Reference documents
-mist-best-practices.docx
-mist-central-wlan-api
-api-endpoints/
-
-# Aruba VSG (Validated Solution Guides) — vendor-licensed PDFs kept locally
-# in docs/central/vsg/ for skill authoring; do not redistribute via the repo.
-docs/central/vsg/
-
-# Mist best-practices reference material kept locally in docs/mist/vsg/
-# for skill authoring; do not redistribute via the repo.
-docs/mist/vsg/
-docs/mist/
-
-# Test reports shared by external collaborators (kept local — may contain
-# operator-environment data we don't want in public repo)
-docs/Qwen3_4B_OpenClaw_HPE_MCP_Test_Report.pdf
-docs/Qwen3_4B_OpenClaw_HPE_MCP_Test_Report_Continued_20260507.md
-docs/engine_test.md
-
-# Earlier root-level copy of the Central Configuration Model VSG markdown;
-# canonical copy now lives at docs/central/vsg/ (covered by the broader rule).
-docs/central_configuration_model.md
-
-# Local working artifacts kept under docs/mappings/ — early drafts of cross-
-# platform configuration mapping references. Not tracked.
-docs/mappings/
-
-# Local-only inventory of probed-live undocumented Central endpoints.
-# Sourced from non-public material; never tracked or redistributed.
-docs/central-undocumented-endpoints.md
