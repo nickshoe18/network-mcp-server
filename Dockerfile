@@ -47,10 +47,20 @@ ENV ENABLE_MIST_WRITE_TOOLS=false
 ENV ENABLE_CENTRAL_WRITE_TOOLS=false
 ENV DISABLE_ELICITATION=false
 
+
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD uv run --no-sync python -c "import httpx; r = httpx.get('http://localhost:8000/mcp', timeout=5); assert r.status_code < 500" || exit 1
 
-CMD ["uv", "run", "--no-sync", "python", "-m", "hpe_networking_mcp"]
+# Fix missing DigiCert intermediate cert for UXI cloud SSL verification
+USER root
+COPY zscaler-full-chain.pem /tmp/zscaler-chain.pem
+RUN chmod 644 /tmp/zscaler-chain.pem
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+USER root
+CMD ["/usr/local/bin/docker-entrypoint.sh"]
+
