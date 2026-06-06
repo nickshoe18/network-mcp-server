@@ -1,0 +1,50 @@
+services:
+
+  hpe-mcp:
+    image: hpe-networking-mcp:latest
+    container_name: hpe-mcp
+    volumes:
+      - ${SECRETS_DIR:-./hpe-secrets}:/run/secrets:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: netops-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - MCP_SERVER_URL=http://hpe-mcp:8000/mcp
+      - FRONTEND_URL=http://localhost:3000
+      - PORT=3001
+      - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/zscaler.crt
+      - PUBLIC_MCP_URL=https://a029-107-213-21-192.ngrok-free.app/mcp
+    depends_on:
+      hpe-mcp:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: netops-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  default:
+    name: netops-network
