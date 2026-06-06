@@ -1,10 +1,13 @@
 services:
 
   hpe-mcp:
-    image: hpe-networking-mcp:latest
+    image: ghcr.io/nowireless4u/hpe-networking-mcp:latest
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
     container_name: hpe-mcp
     volumes:
       - ${SECRETS_DIR:-./hpe-secrets}:/run/secrets:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../zscaler-full-chain.pem:/tmp/zscaler-chain.pem:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
     ports:
       - "8000:8000"
     restart: unless-stopped
