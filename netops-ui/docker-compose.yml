@@ -28,7 +28,6 @@ services:
       - FRONTEND_URL=http://localhost:3000
       - PORT=3001
       - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/zscaler.crt
-      - PUBLIC_MCP_URL=https://a029-107-213-21-192.ngrok-free.app/mcp
     depends_on:
       hpe-mcp:
         condition: service_healthy
