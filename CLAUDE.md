@@ -7,7 +7,7 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 - `netops-frontend` (port 3000) — React web UI via Nginx
 
 ## MCP Servers in Claude Code
-- `hpe-networking-mcp` — 6 platforms: Mist, Central, GreenLake, ClearPass, Axis, UXI
+- `hpe-networking-mcp` — 7 platforms: Mist, Central, GreenLake, ClearPass, Axis, AOS8, UXI
 - `juniper-mist-official` — Official Juniper Mist MCP (Marvis Actions, full Mist surface)
 
 ## Connected Platforms (hpe-networking-mcp)
@@ -18,6 +18,7 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 | HPE GreenLake | 10 | OAuth2 | global.api.greenlake.hpe.com |
 | ClearPass | 84 | OAuth2 | https://10.10.20.5/api (private IP — needs VPN when remote) |
 | Aruba Axis | 12 | API Token | admin-api.axissecurity.com |
+| AOS8 / Mobility Conductor | 36 | Username/Password | https://10.10.20.7:4343 (ArubaMM-VA, AOS-8 8.13.2.2, self-signed cert — verify_ssl=false), private IP — needs VPN when remote |
 | UXI | 11 | OAuth2 | 1 sensor: VNS9LPM0JP (UX-G6EC, Wayne Enterprises group, Rockwall TX) |
 
 ## Secrets Folder
@@ -77,7 +78,6 @@ https://github.com/nickshoe18/network-mcp-server
 
 ## Pending Items
 - VM hosting on ESXi (Ubuntu 22.04, Docker, clone repo, scp secrets)
-- AOS8 Mobility Conductor credentials (disabled — needs aos8_host, aos8_username, aos8_password)
 - Juniper Apstra credentials (disabled — needs apstra_server, apstra_username, apstra_password)
 - Update all three Word docs to reflect latest architecture
 
