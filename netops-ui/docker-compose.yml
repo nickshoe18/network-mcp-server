@@ -10,6 +10,8 @@ services:
       - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
     ports:
       - "8000:8000"
+    environment:
+      - ENABLE_CENTRAL_WRITE_TOOLS=${ENABLE_CENTRAL_WRITE_TOOLS:-false}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]
