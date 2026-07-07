@@ -19,7 +19,20 @@ _CERT_ACTIONS = (
     "delete_client_cert",
     "enable_server_cert",
     "disable_server_cert",
+    "install_server_cert",
 )
+
+# Service ID for each server-cert slot, per the ClearPass Platform Certificates
+# API (PATCH /server-cert/{service_id}). Needed because that endpoint is the
+# only one that accepts an inline `cert_file` PEM string — the by-name PUT
+# endpoint only accepts certificate_url/pkcs12_file_url.
+_SERVER_CERT_SERVICE_ID = {
+    "RADIUS": "1",
+    "HTTPS(ECC)": "2",
+    "HTTPS(RSA)": "7",
+    "RadSec": "21",
+    "Database": "106",
+}
 
 
 async def _confirm_write(ctx: Context, action: str, identifier: str | None) -> dict | None:
@@ -40,12 +53,16 @@ async def clearpass_manage_certificate(
         str,
         Field(
             description="Action: 'import_trust_list', 'delete_trust_list', 'delete_client_cert', "
-            "'enable_server_cert', or 'disable_server_cert'."
+            "'enable_server_cert', 'disable_server_cert', or 'install_server_cert'."
         ),
     ],
     payload: Annotated[
         dict,
-        Field(description="Certificate payload. For import: cert data. For delete/enable/disable: empty dict {}."),
+        Field(
+            description="Certificate payload. For import_trust_list: cert data. For install_server_cert: "
+            "{'cert_file': '<PEM string>'} (or 'certificate_url' / 'pkcs12_file_url'+'pkcs12_passphrase'). "
+            "For delete/enable/disable: empty dict {}."
+        ),
     ],
     cert_id: Annotated[
         str | None,
@@ -57,7 +74,10 @@ async def clearpass_manage_certificate(
     ] = None,
     service_name: Annotated[
         str | None,
-        Field(description="Service name (required for enable/disable_server_cert, e.g. 'RADIUS', 'HTTPS')."),
+        Field(
+            description="Service name, one of 'RADIUS', 'HTTPS(ECC)', 'HTTPS(RSA)', 'RadSec', 'Database'. "
+            "Required for enable/disable_server_cert and install_server_cert."
+        ),
     ] = None,
     confirmed: Annotated[bool, Field(description="Set true after user confirms the operation.")] = False,
 ) -> dict | str:
@@ -69,13 +89,16 @@ async def clearpass_manage_certificate(
         delete_client_cert: Remove a client certificate by cert_id.
         enable_server_cert: Enable a server certificate for a service (requires server_uuid and service_name).
         disable_server_cert: Disable a server certificate for a service (requires server_uuid and service_name).
+        install_server_cert: Install a CA-signed certificate for a server-cert slot (requires service_name).
+            Pairs with clearpass_create_csr — the CSR's private key stays on the ClearPass server, so only
+            the signed certificate (PEM) needs to come back via payload={'cert_file': '<PEM>'}.
 
     Args:
         action_type: Certificate operation to perform.
         payload: Certificate data for import. Empty dict for other actions.
         cert_id: Certificate ID. Required for delete_trust_list and delete_client_cert.
         server_uuid: Server UUID. Required for enable/disable_server_cert.
-        service_name: Service name (e.g. 'RADIUS', 'HTTPS'). Required for enable/disable_server_cert.
+        service_name: Service name. Required for enable/disable_server_cert and install_server_cert.
         confirmed: Set true after user confirms. Skips re-prompting.
     """
     if action_type not in _CERT_ACTIONS:
@@ -148,6 +171,27 @@ def _execute_cert_action(
         action = "enable" if action_type == "enable_server_cert" else "disable"
         path = f"/server-cert/name/{server_uuid}/{service_name}/{action}"
         return client._send_request(path, "patch", query={})
+
+    if action_type == "install_server_cert":
+        if not service_name:
+            raise ToolError({"status_code": 400, "message": "service_name is required for install_server_cert."})
+        service_id = _SERVER_CERT_SERVICE_ID.get(service_name)
+        if not service_id:
+            raise ToolError(
+                {
+                    "status_code": 400,
+                    "message": f"Unknown service_name '{service_name}'. Must be one of: "
+                    f"{', '.join(_SERVER_CERT_SERVICE_ID)}.",
+                }
+            )
+        if not payload.get("cert_file") and not payload.get("certificate_url") and not payload.get("pkcs12_file_url"):
+            raise ToolError(
+                {
+                    "status_code": 400,
+                    "message": "payload must include one of 'cert_file', 'certificate_url', or 'pkcs12_file_url'.",
+                }
+            )
+        return client._send_request(f"/server-cert/{service_id}", "patch", query=payload)
 
     raise ToolError({"status_code": 500, "message": f"Unhandled action_type: {action_type}"})
 
