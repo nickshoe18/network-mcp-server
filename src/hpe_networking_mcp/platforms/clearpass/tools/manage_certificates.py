@@ -202,35 +202,36 @@ async def clearpass_create_csr(
     payload: Annotated[
         dict,
         Field(
-            description="CSR subject parameters. Include fields like common_name, organization, "
-            "organizational_unit, locality, state, country, san_dns, san_ip."
+            description="Unused — kept for backward compatibility. See the raised error for why."
         ),
-    ],
-    confirmed: Annotated[bool, Field(description="Set true after user confirms the operation.")] = False,
+    ] = {},  # noqa: B006 — intentionally unused, tool always errors
+    confirmed: Annotated[bool, Field(description="Unused — kept for backward compatibility.")] = False,
 ) -> dict | str:
-    """Generate a Certificate Signing Request (CSR) on ClearPass.
+    """Always raises — CSR generation has no REST API endpoint in ClearPass.
 
-    Creates a CSR with the specified subject parameters. The CSR can then be
-    submitted to a Certificate Authority for signing.
+    Verified against a live server: ``POST /certificate/csr`` returns 405
+    (``Allow: GET, DELETE`` only), and ``GET /certificate/csr`` returns 422
+    ("ID 'csr' is invalid") — proving ``/certificate/csr`` is not a real
+    endpoint but the generic ``/certificate/{id}`` route misparsing the
+    literal string "csr" as a certificate ID. There is no documented
+    ``pyclearpass`` method for CSR generation either.
 
-    Args:
-        payload: CSR subject fields. Must include common_name at minimum.
-            Supported fields: common_name, organization, organizational_unit,
-            locality, state, country, san_dns (list), san_ip (list).
-        confirmed: Set true after user confirms. Skips re-prompting.
+    ClearPass only supports generating a server-certificate CSR through the
+    Admin Web UI (Administration > Certificates > Certificate Store >
+    Server Certificates tab > Create Certificate Signing Request) — this
+    keeps the private key on the appliance, which the REST API has no way
+    to do. Generate the CSR there, get it signed externally, then install
+    the signed cert with ``clearpass_manage_certificate``
+    (``action_type="install_server_cert"``).
     """
-    if not confirmed:
-        cn = payload.get("common_name", "unknown")
-        decline = await _confirm_write(ctx, "generate CSR", cn)
-        if decline:
-            return decline
-
-    try:
-        from pyclearpass.api_certificateauthority import ApiCertificateAuthority
-
-        client = await get_clearpass_session(ApiCertificateAuthority)
-        return client._send_request("/certificate/csr", "post", query=payload)
-    except ToolError:
-        raise
-    except Exception as e:
-        raise ToolError({"status_code": 502, "message": f"Error creating CSR: {e}"}) from e
+    raise ToolError(
+        {
+            "status_code": 501,
+            "message": (
+                "ClearPass has no REST API for CSR generation — generate it via the Admin UI "
+                "(Administration > Certificates > Certificate Store > Server Certificates tab > "
+                "Create Certificate Signing Request), get it signed, then install the signed cert "
+                "with clearpass_manage_certificate(action_type='install_server_cert')."
+            ),
+        }
+    )
