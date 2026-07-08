@@ -22,17 +22,6 @@ _CERT_ACTIONS = (
     "install_server_cert",
 )
 
-# Service ID for each server-cert slot, per the ClearPass Platform Certificates
-# API (PATCH /server-cert/{service_id}). Needed because that endpoint is the
-# only one that accepts an inline `cert_file` PEM string — the by-name PUT
-# endpoint only accepts certificate_url/pkcs12_file_url.
-_SERVER_CERT_SERVICE_ID = {
-    "RADIUS": "1",
-    "HTTPS(ECC)": "2",
-    "HTTPS(RSA)": "7",
-    "RadSec": "21",
-    "Database": "106",
-}
 
 
 async def _confirm_write(ctx: Context, action: str, identifier: str | None) -> dict | None:
@@ -59,9 +48,11 @@ async def clearpass_manage_certificate(
     payload: Annotated[
         dict,
         Field(
-            description="Certificate payload. For import_trust_list: cert data. For install_server_cert: "
-            "{'cert_file': '<PEM string>'} (or 'certificate_url' / 'pkcs12_file_url'+'pkcs12_passphrase'). "
-            "For delete/enable/disable: empty dict {}."
+            description="Certificate payload. For import_trust_list: {'cert_file': '<PEM string>', "
+            "'cert_usage': ['Others', ...]}. For install_server_cert: {'certificate_url': '<url>'} or "
+            "{'pkcs12_file_url': '<url>', 'pkcs12_passphrase': '<pass>'} — ClearPass fetches the cert by "
+            "URL; inline PEM content ('cert_file') is NOT accepted for this action (verified against a "
+            "live server — see install_server_cert docs below). For delete/enable/disable: empty dict {}."
         ),
     ],
     cert_id: Annotated[
@@ -70,7 +61,7 @@ async def clearpass_manage_certificate(
     ] = None,
     server_uuid: Annotated[
         str | None,
-        Field(description="Server UUID (required for enable/disable_server_cert)."),
+        Field(description="Server UUID (required for enable/disable_server_cert and install_server_cert)."),
     ] = None,
     service_name: Annotated[
         str | None,
@@ -84,20 +75,25 @@ async def clearpass_manage_certificate(
     """Manage ClearPass certificates (trust lists, client certs, server certs).
 
     Actions:
-        import_trust_list: Import a CA certificate into the trust list. Payload requires cert_file data.
+        import_trust_list: Import a CA certificate into the trust list. Payload requires cert_file
+            (PEM string) and cert_usage (list of usage strings, e.g. ['Others']).
         delete_trust_list: Remove a CA certificate from the trust list by cert_id.
         delete_client_cert: Remove a client certificate by cert_id.
         enable_server_cert: Enable a server certificate for a service (requires server_uuid and service_name).
         disable_server_cert: Disable a server certificate for a service (requires server_uuid and service_name).
-        install_server_cert: Install a CA-signed certificate for a server-cert slot (requires service_name).
-            Pairs with clearpass_create_csr — the CSR's private key stays on the ClearPass server, so only
-            the signed certificate (PEM) needs to come back via payload={'cert_file': '<PEM>'}.
+        install_server_cert: Install a CA-signed certificate for a server-cert slot (requires server_uuid
+            and service_name). Calls PUT /server-cert/name/{server_uuid}/{service_name} — verified against
+            a live ClearPass 6.14 server that this endpoint ONLY accepts 'certificate_url' or
+            'pkcs12_file_url'+'pkcs12_passphrase' in the payload; it rejects inline 'cert_file' PEM content
+            with "Invalid post body. Either provide certificate_url or pkcs12_file_url and
+            pkcs12_passphrase." The signed cert (or PKCS12 bundle) must be hosted at a URL ClearPass can
+            fetch. Pairs with clearpass_create_csr's guidance to generate the CSR via the Admin UI first.
 
     Args:
         action_type: Certificate operation to perform.
         payload: Certificate data for import. Empty dict for other actions.
         cert_id: Certificate ID. Required for delete_trust_list and delete_client_cert.
-        server_uuid: Server UUID. Required for enable/disable_server_cert.
+        server_uuid: Server UUID. Required for enable/disable_server_cert and install_server_cert.
         service_name: Service name. Required for enable/disable_server_cert and install_server_cert.
         confirmed: Set true after user confirms. Skips re-prompting.
     """
@@ -173,25 +169,24 @@ def _execute_cert_action(
         return client._send_request(path, "patch", query={})
 
     if action_type == "install_server_cert":
-        if not service_name:
-            raise ToolError({"status_code": 400, "message": "service_name is required for install_server_cert."})
-        service_id = _SERVER_CERT_SERVICE_ID.get(service_name)
-        if not service_id:
+        if not server_uuid or not service_name:
             raise ToolError(
                 {
                     "status_code": 400,
-                    "message": f"Unknown service_name '{service_name}'. Must be one of: "
-                    f"{', '.join(_SERVER_CERT_SERVICE_ID)}.",
+                    "message": "server_uuid and service_name are required for install_server_cert.",
                 }
             )
-        if not payload.get("cert_file") and not payload.get("certificate_url") and not payload.get("pkcs12_file_url"):
+        if not payload.get("certificate_url") and not payload.get("pkcs12_file_url"):
             raise ToolError(
                 {
                     "status_code": 400,
-                    "message": "payload must include one of 'cert_file', 'certificate_url', or 'pkcs12_file_url'.",
+                    "message": "payload must include 'certificate_url', or 'pkcs12_file_url' + "
+                    "'pkcs12_passphrase' — this ClearPass endpoint does not accept inline 'cert_file' "
+                    "PEM content; the cert must be hosted at a URL ClearPass can fetch.",
                 }
             )
-        return client._send_request(f"/server-cert/{service_id}", "patch", query=payload)
+        path = f"/server-cert/name/{server_uuid}/{service_name}"
+        return client._send_request(path, "put", query=payload)
 
     raise ToolError({"status_code": 500, "message": f"Unhandled action_type: {action_type}"})
 
