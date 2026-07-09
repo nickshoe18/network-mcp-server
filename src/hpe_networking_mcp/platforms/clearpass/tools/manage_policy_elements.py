@@ -23,6 +23,8 @@ async def _confirm_write(
     shared elicitation/decline/cancel logic now lives in the middleware
     (#148).
     """
+    if confirmed:
+        return None
     label = identifier or "unknown"
     return await confirm_write(ctx, f"ClearPass: {action_type} {resource} '{label}'. Confirm?")
 
