@@ -29,7 +29,17 @@ _PROBE_ANNOTATIONS = ToolAnnotations(
     openWorldHint=True,
 )
 
-_ALL_PLATFORMS: tuple[str, ...] = ("mist", "central", "greenlake", "clearpass", "apstra", "axis", "aos8", "uxi")
+_ALL_PLATFORMS: tuple[str, ...] = (
+    "mist",
+    "central",
+    "classic_central",
+    "greenlake",
+    "clearpass",
+    "apstra",
+    "axis",
+    "aos8",
+    "uxi",
+)
 
 
 def _normalize_platform_filter(
@@ -107,6 +117,17 @@ async def _probe_central(ctx: Context) -> dict[str, Any]:
         }
     except Exception as e:
         return {"status": "degraded", "message": f"Central probe failed: {e}"}
+
+
+async def _probe_classic_central(ctx: Context) -> dict[str, Any]:
+    client = ctx.lifespan_context.get("classic_central_client")
+    if client is None:
+        return {"status": "unavailable", "message": "Classic Central is not configured or failed to initialize"}
+    try:
+        await client.health_check()
+        return {"status": "ok", "message": "Classic Central API reachable", "base_url": client.base_url}
+    except Exception as e:
+        return {"status": "degraded", "message": f"Classic Central probe failed: {e}"}
 
 
 async def _probe_greenlake(ctx: Context) -> dict[str, Any]:
@@ -230,6 +251,7 @@ async def _probe_uxi(ctx: Context) -> dict[str, Any]:
 _PROBES = {
     "mist": _probe_mist,
     "central": _probe_central,
+    "classic_central": _probe_classic_central,
     "greenlake": _probe_greenlake,
     "clearpass": _probe_clearpass,
     "apstra": _probe_apstra,

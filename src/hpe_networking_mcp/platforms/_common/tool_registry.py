@@ -41,6 +41,7 @@ REGISTRIES: dict[str, dict[str, ToolSpec]] = {
     "apstra": {},
     "axis": {},
     "central": {},
+    "classic_central": {},
     "clearpass": {},
     "greenlake": {},
     "mist": {},
@@ -67,6 +68,7 @@ _WRITE_TAG_BY_PLATFORM: dict[str, set[str]] = {
     "apstra": {"apstra_write", "apstra_write_delete"},
     "axis": {"axis_write", "axis_write_delete"},
     "central": {"central_write_delete"},
+    "classic_central": {"classic_central_write"},
     "clearpass": {"clearpass_write_delete"},
     "greenlake": set(),  # GreenLake is read-only today.
     "mist": {"mist_write", "mist_write_delete"},
@@ -79,6 +81,7 @@ _GATE_CONFIG_ATTR: dict[str, str | None] = {
     "apstra": "enable_apstra_write_tools",
     "axis": "enable_axis_write_tools",
     "central": "enable_central_write_tools",
+    "classic_central": "enable_classic_central_write_tools",
     "clearpass": "enable_clearpass_write_tools",
     "greenlake": None,
     "mist": "enable_mist_write_tools",

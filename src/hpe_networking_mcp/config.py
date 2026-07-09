@@ -14,6 +14,11 @@ Secret file mapping:
     /run/secrets/central_base_url
     /run/secrets/central_client_id
     /run/secrets/central_client_secret
+    /run/secrets/classic_central_base_url
+    /run/secrets/classic_central_client_id
+    /run/secrets/classic_central_client_secret
+    /run/secrets/classic_central_customer_id
+    /run/secrets/classic_central_refresh_token
     /run/secrets/greenlake_api_base_url
     /run/secrets/greenlake_client_id
     /run/secrets/greenlake_client_secret
@@ -54,6 +59,24 @@ class CentralSecrets:
     base_url: str
     client_id: str
     client_secret: str
+
+
+@dataclass
+class ClassicCentralSecrets:
+    """Classic Aruba Central credentials -- a separate API/product from New Central.
+
+    Uses an OAuth2 refresh-token grant (not client-credentials like New
+    Central). Central rotates the refresh token on every use; the client
+    tracks the current one in memory and best-effort persists rotations
+    back to ``refresh_token_path`` so a restart can pick up the latest.
+    """
+
+    base_url: str
+    client_id: str
+    client_secret: str
+    customer_id: str
+    refresh_token: str
+    refresh_token_path: str | None = None
 
 
 @dataclass
@@ -122,6 +145,10 @@ class ServerConfig:
     log_level: str = "INFO"
     enable_mist_write_tools: bool = False
     enable_central_write_tools: bool = False
+    # Defaults True (unlike the others) at the user's explicit request when
+    # this platform was added -- flip ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS=false
+    # to gate it like every other platform.
+    enable_classic_central_write_tools: bool = True
     enable_clearpass_write_tools: bool = False
     enable_apstra_write_tools: bool = False
     enable_axis_write_tools: bool = False
@@ -175,6 +202,7 @@ class ServerConfig:
     # Platform secrets — None means platform is disabled
     mist: MistSecrets | None = None
     central: CentralSecrets | None = None
+    classic_central: ClassicCentralSecrets | None = None
     greenlake: GreenLakeSecrets | None = None
     clearpass: ClearPassSecrets | None = None
     apstra: ApstraSecrets | None = None
@@ -189,6 +217,8 @@ class ServerConfig:
             platforms.append("mist")
         if self.central:
             platforms.append("central")
+        if self.classic_central:
+            platforms.append("classic_central")
         if self.greenlake:
             platforms.append("greenlake")
         if self.clearpass:
@@ -266,6 +296,54 @@ def _load_central() -> CentralSecrets | None:
         base_url=base_url,
         client_id=client_id,
         client_secret=client_secret,
+    )
+
+
+def _load_classic_central() -> ClassicCentralSecrets | None:
+    """Load Classic Central credentials from Docker secrets."""
+    base_url = _read_secret("classic_central_base_url")
+    client_id = _read_secret("classic_central_client_id")
+    client_secret = _read_secret("classic_central_client_secret")
+    customer_id = _read_secret("classic_central_customer_id")
+    refresh_token = _read_secret("classic_central_refresh_token")
+
+    missing = []
+    if not base_url:
+        missing.append("classic_central_base_url")
+    if not client_id:
+        missing.append("classic_central_client_id")
+    if not client_secret:
+        missing.append("classic_central_client_secret")
+    if not customer_id:
+        missing.append("classic_central_customer_id")
+    if not refresh_token:
+        missing.append("classic_central_refresh_token")
+
+    if missing:
+        logger.info("Classic Central: disabled (missing secrets: {})", ", ".join(missing))
+        return None
+
+    assert base_url is not None
+    assert client_id is not None
+    assert client_secret is not None
+    assert customer_id is not None
+    assert refresh_token is not None
+    logger.info("Classic Central: credentials loaded (base_url: {})", base_url)
+    # The main SECRETS_DIR mount is read-only in Docker (by design, for every
+    # other credential). Classic Central uniquely needs to persist a rotated
+    # refresh token, so docker-compose.yml binds this one file a second time,
+    # read-write, at CLASSIC_CENTRAL_REFRESH_TOKEN_WRITE_PATH. Falls back to
+    # the normal (writable, non-Docker) secrets path when that's unset.
+    write_path = os.getenv("CLASSIC_CENTRAL_REFRESH_TOKEN_WRITE_PATH") or str(
+        Path(SECRETS_DIR) / "classic_central_refresh_token"
+    )
+    return ClassicCentralSecrets(
+        base_url=base_url,
+        client_id=client_id,
+        client_secret=client_secret,
+        customer_id=customer_id,
+        refresh_token=refresh_token,
+        refresh_token_path=write_path,
     )
 
 
@@ -491,6 +569,7 @@ def load_config() -> ServerConfig:
     _truthy = ("true", "1", "yes")
     enable_mist_write = os.getenv("ENABLE_MIST_WRITE_TOOLS", "false").lower() in _truthy
     enable_central_write = os.getenv("ENABLE_CENTRAL_WRITE_TOOLS", "false").lower() in _truthy
+    enable_classic_central_write = os.getenv("ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS", "true").lower() in _truthy
     enable_clearpass_write = os.getenv("ENABLE_CLEARPASS_WRITE_TOOLS", "false").lower() in _truthy
     enable_apstra_write = os.getenv("ENABLE_APSTRA_WRITE_TOOLS", "false").lower() in _truthy
     enable_axis_write = os.getenv("ENABLE_AXIS_WRITE_TOOLS", "false").lower() in _truthy
@@ -560,6 +639,7 @@ def load_config() -> ServerConfig:
     # Load platform credentials from Docker secrets
     mist = _load_mist()
     central = _load_central()
+    classic_central = _load_classic_central()
     greenlake = _load_greenlake()
     clearpass = _load_clearpass()
     apstra = _load_apstra()
@@ -573,6 +653,7 @@ def load_config() -> ServerConfig:
         log_level=log_level,
         enable_mist_write_tools=enable_mist_write,
         enable_central_write_tools=enable_central_write,
+        enable_classic_central_write_tools=enable_classic_central_write,
         enable_clearpass_write_tools=enable_clearpass_write,
         enable_apstra_write_tools=enable_apstra_write,
         enable_axis_write_tools=enable_axis_write,
@@ -588,6 +669,7 @@ def load_config() -> ServerConfig:
         code_sandbox_max_duration_secs=sandbox_max_duration,
         mist=mist,
         central=central,
+        classic_central=classic_central,
         greenlake=greenlake,
         clearpass=clearpass,
         apstra=apstra,

@@ -10,10 +10,18 @@ services:
       - ${SECRETS_DIR:-./hpe-secrets}:/run/secrets:ro
       - ${SECRETS_DIR:-./hpe-secrets}/../zscaler-full-chain.pem:/tmp/zscaler-chain.pem:ro
       - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      # Classic Central rotates its refresh token on every use (see
+      # platforms/classic_central/client.py). The main secrets mount above
+      # is read-only by design for every other credential; this single
+      # file gets its own read-write bind so the rotated token can persist
+      # across restarts instead of going stale after one boot.
+      - ${SECRETS_DIR:-./hpe-secrets}/classic_central_refresh_token:/run/secrets-rw/classic_central_refresh_token
     ports:
       - "8000:8000"
     environment:
       - ENABLE_CENTRAL_WRITE_TOOLS=${ENABLE_CENTRAL_WRITE_TOOLS:-false}
+      - CLASSIC_CENTRAL_REFRESH_TOKEN_WRITE_PATH=/run/secrets-rw/classic_central_refresh_token
+      - ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS=${ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS:-true}
       - ENABLE_CLEARPASS_WRITE_TOOLS=${ENABLE_CLEARPASS_WRITE_TOOLS:-false}
       - ENABLE_AOS8_WRITE_TOOLS=${ENABLE_AOS8_WRITE_TOOLS:-false}
     restart: unless-stopped

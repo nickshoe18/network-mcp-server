@@ -14,7 +14,8 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 | Platform | Tools | Auth | Notes |
 |---|---|---|---|
 | Juniper Mist | 516 | API Token | Org: Stark Industries, org_id: 5f24e447-1145-4efa-94e0-ccec1a2a00a7, host: api.gc4.mist.com (Google Cloud 4) |
-| Aruba Central | 404 | OAuth2 | internal.api.central.arubanetworks.com |
+| Aruba Central (New Central) | 404 | OAuth2 (client-credentials) | internal.api.central.arubanetworks.com |
+| Classic Central | 5 | OAuth2 (refresh-token) | internal-apigw.central.arubanetworks.com — separate legacy API/product from New Central; needed for devices not yet migrated (e.g. Bat Cave's OfficeSwitch/GarageSwitch, template-managed). Refresh token rotates on every use — see `platforms/classic_central/client.py` |
 | HPE GreenLake | 10 | OAuth2 | global.api.greenlake.hpe.com |
 | ClearPass | 84 | OAuth2 | https://10.10.20.5/api (private IP — needs VPN when remote) |
 | Aruba Axis | 12 | API Token | admin-api.axissecurity.com |
@@ -42,7 +43,7 @@ Both volume-mounted into the hpe-mcp container at runtime.
 - **Central tools**: all go via `central_invoke_tool(name, params)` inside execute
 - **UXI tools**: first-class direct calls — `uxi_list_sensors`, `uxi_get_sensor_status`
 - **ClearPass**: offline when remote from 10.10.20.5 (needs local network or VPN)
-- **Write tools**: disabled by default. Enable in netops-ui/.env: ENABLE_CENTRAL_WRITE_TOOLS=true
+- **Write tools**: disabled by default. Enable in netops-ui/.env: ENABLE_CENTRAL_WRITE_TOOLS=true. Exception: Classic Central write tools default to **enabled** (ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS=true) per explicit choice when that platform was added
 
 ## Claude Desktop Config
 `~/Library/Application Support/Claude/claude_desktop_config.json`

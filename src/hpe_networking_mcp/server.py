@@ -83,6 +83,21 @@ async def lifespan(server: FastMCP):
     else:
         context["central_conn"] = None
 
+    # --- Classic Central ---
+    if config.classic_central:
+        try:
+            from hpe_networking_mcp.platforms.classic_central.client import ClassicCentralClient
+
+            context["classic_central_client"] = ClassicCentralClient(config.classic_central)
+            context["classic_central_config"] = config.classic_central
+        except Exception as e:
+            logger.warning("Classic Central: failed to initialize — {}", e)
+            context["classic_central_client"] = None
+            context["classic_central_config"] = None
+    else:
+        context["classic_central_client"] = None
+        context["classic_central_config"] = None
+
     # --- GreenLake ---
     if config.greenlake:
         try:
@@ -217,6 +232,12 @@ async def lifespan(server: FastMCP):
         apstra = context.get("apstra_client")
         if apstra is not None:
             await apstra.aclose()
+        classic_central = context.get("classic_central_client")
+        if classic_central is not None:
+            try:
+                await classic_central.aclose()
+            except Exception as e:  # noqa: BLE001 — shutdown must not raise
+                logger.warning("Classic Central: aclose failed during shutdown — {}", e)
         axis = context.get("axis_client")
         if axis is not None:
             await axis.aclose()
@@ -301,6 +322,8 @@ def create_server(config: ServerConfig) -> FastMCP:
         _register_mist_tools(mcp, config)
     if config.central:
         _register_central_tools(mcp, config)
+    if config.classic_central:
+        _register_classic_central_tools(mcp, config)
     if config.greenlake:
         _register_greenlake_tools(mcp, config)
     if config.clearpass:
@@ -355,6 +378,8 @@ def create_server(config: ServerConfig) -> FastMCP:
         mcp.add_transform(Visibility(False, tags={"mist_write", "mist_write_delete"}, components={"tool"}))
     if not config.enable_central_write_tools:
         mcp.add_transform(Visibility(False, tags={"central_write_delete"}, components={"tool"}))
+    if not config.enable_classic_central_write_tools:
+        mcp.add_transform(Visibility(False, tags={"classic_central_write"}, components={"tool"}))
     if not config.enable_clearpass_write_tools:
         mcp.add_transform(Visibility(False, tags={"clearpass_write_delete"}, components={"tool"}))
     if not config.enable_apstra_write_tools:
@@ -594,6 +619,14 @@ def _register_central_tools(mcp: FastMCP, config: ServerConfig) -> None:
 
     count = register_tools(mcp, config)
     logger.info("Central: registered {} tools", count)
+
+
+def _register_classic_central_tools(mcp: FastMCP, config: ServerConfig) -> None:
+    """Register all Classic Central platform tools."""
+    from hpe_networking_mcp.platforms.classic_central import register_tools
+
+    count = register_tools(mcp, config)
+    logger.info("Classic Central: registered {} tools", count)
 
 
 def _register_greenlake_tools(mcp: FastMCP, config: ServerConfig) -> None:
