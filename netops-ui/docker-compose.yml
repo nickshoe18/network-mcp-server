@@ -15,6 +15,7 @@ services:
     environment:
       - ENABLE_CENTRAL_WRITE_TOOLS=${ENABLE_CENTRAL_WRITE_TOOLS:-false}
       - ENABLE_CLEARPASS_WRITE_TOOLS=${ENABLE_CLEARPASS_WRITE_TOOLS:-false}
+      - ENABLE_AOS8_WRITE_TOOLS=${ENABLE_AOS8_WRITE_TOOLS:-false}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]

@@ -231,7 +231,19 @@ async def aos8_manage_aaa_server(
         Field(
             description=(
                 "AAA server body. Must include the protocol-specific name field "
-                "(rad_server_name / tacacs_server_name / ldap_server_name / internal_db_server_name)."
+                "(rad_server_name / tacacs_server_name / ldap_server_name / internal_db_server_name). "
+                "IMPORTANT (verified live against a RADIUS server on AOS8 8.13.2.2): every other "
+                "attribute is a NESTED sub-object keyed by its CLI-mapped name, NOT a flat field. "
+                "Confirmed working shapes for rad_server: {'rad_host': {'host': '<ip>'}} for the "
+                "server address, {'rad_key': {'key': '<secret>'}} for the shared secret. Flat keys "
+                "like 'host'/'ipaddr'/'key'/'auth_port' are silently rejected with a generic "
+                "{'Error': 'Exception raised while processing request'} — no field-specific message. "
+                "GET /v1/configuration/object/rad_server?config_path=... (outside this tool, e.g. via "
+                "curl) returns the full nested schema with defaults if you need to discover a field "
+                "you haven't set yet — e.g. rad_authport: {'authport': 1812}, rad_acctport: "
+                "{'acctport': 1813}, rad_retransmit: {'retransmit': 3}, rad_timeout: {'timeout': 5}. "
+                "The same nesting pattern likely applies to tacacs_server/ldap_server but has not "
+                "been verified against a live server."
             )
         ),
     ],
@@ -240,6 +252,14 @@ async def aos8_manage_aaa_server(
     """Create, update, or delete an AAA server (RADIUS/TACACS/LDAP/internal).
 
     Returns ``{"result": ..., "requires_write_memory_for": [config_path]}`` on success.
+
+    Also worth knowing (both verified live): AOS8 rejects edits at a parent
+    hierarchy node while a child node has uncommitted pending config — call
+    ``aos8_write_memory`` on the child first ("Node cannot be edited. Node
+    '<path>' in the node path has pending configuration"). And re-deleting
+    an already-deleted object returns a clear "... undefined in this node"
+    error rather than silently succeeding, which is a reliable way to
+    confirm a prior delete actually took effect.
     """
     if server_type not in _AAA_SERVER_OBJECT_BY_TYPE:
         raise ToolError(
