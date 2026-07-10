@@ -13,10 +13,10 @@ from pydantic import Field
 from hpe_networking_mcp.platforms.central._registry import tool
 from hpe_networking_mcp.platforms.central.tools import READ_ONLY
 from hpe_networking_mcp.platforms.central.tools.security_policy import (
-    WRITE_DELETE,
     _CONFIRMED_FIELD,
     _DEVICE_FUNCTION_FIELD,
     _SCOPE_ID_FIELD,
+    WRITE_DELETE,
     _get_resource,
     _manage_resource,
 )
