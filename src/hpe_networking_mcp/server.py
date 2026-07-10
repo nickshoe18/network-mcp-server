@@ -190,6 +190,21 @@ async def lifespan(server: FastMCP):
         context["uxi_client"] = None
         context["uxi_config"] = None
 
+    # --- Security Director ---
+    if config.security_director:
+        try:
+            from hpe_networking_mcp.platforms.security_director.client import SecurityDirectorClient
+
+            context["security_director_client"] = SecurityDirectorClient(config.security_director)
+            context["security_director_config"] = config.security_director
+        except Exception as e:
+            logger.warning("Security Director: failed to initialize — {}", e)
+            context["security_director_client"] = None
+            context["security_director_config"] = None
+    else:
+        context["security_director_client"] = None
+        context["security_director_config"] = None
+
     # --- Verify every enabled platform via the shared probe helpers from
     # platforms/health.py. One source of truth: startup log output and the
     # runtime ``health`` tool report the same status. Probes that fail do
@@ -253,6 +268,12 @@ async def lifespan(server: FastMCP):
                 await uxi.aclose()
             except Exception as e:  # noqa: BLE001
                 logger.warning("UXI: aclose failed during shutdown — {}", e)
+        security_director = context.get("security_director_client")
+        if security_director is not None:
+            try:
+                await security_director.aclose()
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Security Director: aclose failed during shutdown — {}", e)
         logger.info("Server shutdown complete")
 
 
@@ -336,6 +357,8 @@ def create_server(config: ServerConfig) -> FastMCP:
         _register_aos8_tools(mcp, config)
     if config.uxi:
         _register_uxi_tools(mcp, config)
+    if config.security_director:
+        _register_security_director_tools(mcp, config)
 
     # --- Cross-platform aggregators ---
     # These are workarounds for dynamic mode's "AI picks one platform and stops"
@@ -708,6 +731,14 @@ def _register_uxi_tools(mcp: FastMCP, config: ServerConfig) -> None:
 
     count = register_tools(mcp, config)
     logger.info("UXI: registered {} tools", count)
+
+
+def _register_security_director_tools(mcp: FastMCP, config: ServerConfig) -> None:
+    """Register all Security Director platform tools."""
+    from hpe_networking_mcp.platforms.security_director import register_tools
+
+    count = register_tools(mcp, config)
+    logger.info("Security Director: registered {} tools", count)
 
 
 def _register_sync_tools(mcp: FastMCP) -> None:

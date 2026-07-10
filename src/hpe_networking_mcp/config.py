@@ -34,6 +34,8 @@ Secret file mapping:
     /run/secrets/apstra_verify_ssl (optional, default true)
     /run/secrets/uxi_client_id
     /run/secrets/uxi_client_secret
+    /run/secrets/security_director_base_url
+    /run/secrets/security_director_api_key
 """
 
 import os
@@ -137,6 +139,14 @@ class UXISecrets:
 
 
 @dataclass
+class SecurityDirectorSecrets:
+    """Juniper Security Director Cloud credentials -- single static API key."""
+
+    base_url: str
+    api_key: str
+
+
+@dataclass
 class ServerConfig:
     """Global server configuration."""
 
@@ -210,6 +220,7 @@ class ServerConfig:
     axis: AxisSecrets | None = None
     aos8: AOS8Secrets | None = None
     uxi: UXISecrets | None = None
+    security_director: SecurityDirectorSecrets | None = None
 
     @property
     def enabled_platforms(self) -> list[str]:
@@ -232,6 +243,8 @@ class ServerConfig:
             platforms.append("aos8")
         if self.uxi:
             platforms.append("uxi")
+        if self.security_director:
+            platforms.append("security_director")
         return platforms
 
 
@@ -547,6 +560,24 @@ def _load_uxi() -> UXISecrets | None:
     return UXISecrets(client_id=client_id, client_secret=client_secret)
 
 
+def _load_security_director() -> SecurityDirectorSecrets | None:
+    """Load Security Director Cloud credentials from Docker secrets."""
+    base_url = _read_secret("security_director_base_url")
+    api_key = _read_secret("security_director_api_key")
+    missing = []
+    if not base_url:
+        missing.append("security_director_base_url")
+    if not api_key:
+        missing.append("security_director_api_key")
+    if missing:
+        logger.info("Security Director: disabled (missing secrets: {})", ", ".join(missing))
+        return None
+    assert base_url is not None
+    assert api_key is not None
+    logger.info("Security Director: credentials loaded (base_url: {})", base_url)
+    return SecurityDirectorSecrets(base_url=base_url, api_key=api_key)
+
+
 def load_config() -> ServerConfig:
     """Load server configuration from Docker secrets and environment variables.
 
@@ -648,6 +679,7 @@ def load_config() -> ServerConfig:
     axis = _load_axis()
     aos8 = _load_aos8()
     uxi = _load_uxi()
+    security_director = _load_security_director()
 
     config = ServerConfig(
         port=port,
@@ -679,6 +711,7 @@ def load_config() -> ServerConfig:
         axis=axis,
         aos8=aos8,
         uxi=uxi,
+        security_director=security_director,
     )
 
     if not config.enabled_platforms:

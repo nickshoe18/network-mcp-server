@@ -39,6 +39,7 @@ _ALL_PLATFORMS: tuple[str, ...] = (
     "axis",
     "aos8",
     "uxi",
+    "security_director",
 )
 
 
@@ -248,6 +249,18 @@ async def _probe_uxi(ctx: Context) -> dict[str, Any]:
         return {"status": "degraded", "message": f"UXI probe failed: {e}"}
 
 
+async def _probe_security_director(ctx: Context) -> dict[str, Any]:
+    """Probe the Juniper Security Director Cloud platform."""
+    client = ctx.lifespan_context.get("security_director_client")
+    if client is None:
+        return {"status": "unavailable", "message": "Security Director is not configured or failed to initialize"}
+    try:
+        await client.health_check()
+        return {"status": "ok", "message": "Security Director API reachable"}
+    except Exception as e:
+        return {"status": "degraded", "message": f"Security Director probe failed: {e}"}
+
+
 _PROBES = {
     "mist": _probe_mist,
     "central": _probe_central,
@@ -258,6 +271,7 @@ _PROBES = {
     "axis": _probe_axis,
     "aos8": _probe_aos8,
     "uxi": _probe_uxi,
+    "security_director": _probe_security_director,
 }
 
 

@@ -56,6 +56,7 @@ REGISTRIES: dict[str, dict[str, ToolSpec]] = {
     "greenlake": {},
     "mist": {},
     "uxi": {},
+    "security_director": {},
     # Template platform — never registered at runtime, but the registry
     # entry has to exist so test_platform_template can import without
     # ValueError when the example tools are loaded.
@@ -83,6 +84,7 @@ _WRITE_TAG_BY_PLATFORM: dict[str, set[str]] = {
     "greenlake": {"greenlake_write", "greenlake_write_delete"},
     "mist": {"mist_write", "mist_write_delete"},
     "uxi": {"uxi_write", "uxi_write_delete"},
+    "security_director": set(),  # Security Director is read-only today.
     "_template": {"_template_write", "_template_write_delete"},
 }
 
@@ -96,6 +98,7 @@ _GATE_CONFIG_ATTR: dict[str, str | None] = {
     "greenlake": "enable_greenlake_write_tools",
     "mist": "enable_mist_write_tools",
     "uxi": "enable_uxi_write_tools",
+    "security_director": None,
     "_template": None,  # Never instantiated at runtime; gating attr unused.
 }
 

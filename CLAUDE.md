@@ -21,6 +21,7 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 | Aruba Axis | 12 | API Token | admin-api.axissecurity.com |
 | AOS8 / Mobility Conductor | 36 | Username/Password | https://10.10.20.7:4343 (ArubaMM-VA, AOS-8 8.13.2.2, self-signed cert — verify_ssl=false), private IP — needs VPN when remote |
 | UXI | 11 | OAuth2 | 1 sensor: VNS9LPM0JP (UX-G6EC, Wayne Enterprises group, Rockwall TX) |
+| Juniper Security Director Cloud | 4 | Static API key (`x-api-key` header) | api.sdcloud.juniperclouds.net — SD-WAN/SASE site-and-device orchestration (devices, sites); confirmed against the real OpenAPI spec, no firewall security-policy/NAT/address-object API found in that spec. New platform, first pass — read-only |
 
 ## Secrets Folder
 `~/hpe-networking-mcp/secrets/` — one file per credential, gitignored
