@@ -82,6 +82,12 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
 # verbatim from the OpenAPI spec; reformatting them at lint time would
 # corrupt embedded JSON examples / quoted enum lists.
 "src/hpe_networking_mcp/platforms/mist/tools/*.py" = ["E501"]
+# GreenLake tools ported from upstream's OpenAPI-spec-generated files —
+# long verbatim spec descriptions exceed the 120-char limit, and some
+# upstream operations use non-snake_case parameter names that mirror
+# literal HTTP header names (``If_Match`` -> ``If-Match``, ``groupId``,
+# ``failureId``) which N803 would otherwise flag.
+"src/hpe_networking_mcp/platforms/greenlake/tools/*__*.py" = ["E501", "N803"]
 # Central models ported from upstream — naming conventions preserved
 "src/hpe_networking_mcp/platforms/central/models.py" = ["N815"]
 

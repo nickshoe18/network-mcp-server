@@ -150,6 +150,7 @@ class ServerConfig:
     # to gate it like every other platform.
     enable_classic_central_write_tools: bool = True
     enable_clearpass_write_tools: bool = False
+    enable_greenlake_write_tools: bool = False
     enable_apstra_write_tools: bool = False
     enable_axis_write_tools: bool = False
     enable_aos8_write_tools: bool = False
@@ -571,6 +572,7 @@ def load_config() -> ServerConfig:
     enable_central_write = os.getenv("ENABLE_CENTRAL_WRITE_TOOLS", "false").lower() in _truthy
     enable_classic_central_write = os.getenv("ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS", "true").lower() in _truthy
     enable_clearpass_write = os.getenv("ENABLE_CLEARPASS_WRITE_TOOLS", "false").lower() in _truthy
+    enable_greenlake_write = os.getenv("ENABLE_GREENLAKE_WRITE_TOOLS", "false").lower() in _truthy
     enable_apstra_write = os.getenv("ENABLE_APSTRA_WRITE_TOOLS", "false").lower() in _truthy
     enable_axis_write = os.getenv("ENABLE_AXIS_WRITE_TOOLS", "false").lower() in _truthy
     enable_aos8_write = os.getenv("ENABLE_AOS8_WRITE_TOOLS", "false").lower() in _truthy
@@ -655,6 +657,7 @@ def load_config() -> ServerConfig:
         enable_central_write_tools=enable_central_write,
         enable_classic_central_write_tools=enable_classic_central_write,
         enable_clearpass_write_tools=enable_clearpass_write,
+        enable_greenlake_write_tools=enable_greenlake_write,
         enable_apstra_write_tools=enable_apstra_write,
         enable_axis_write_tools=enable_axis_write,
         enable_aos8_write_tools=enable_aos8_write,

@@ -1,0 +1,44 @@
+"""GreenLake Service Catalog tools -- ported from upstream nowireless4u/hpe-networking-mcp.
+
+Ported from ``platforms/greenlake/tools/service_catalog__notifications.py`` in the upstream repo (generated
+there from a vendored OpenAPI spec). Upstream's generator, ``Capability``
+classification enum, and ``AsyncTokenManager`` auth were NOT ported -- this
+file uses local's inline dict-annotation style and the ``greenlake_request()``
+shim added to ``client.py`` for the actual HTTP transport.
+
+Upstream service: ``service-catalog``   tag: ``notifications``   operations: 1
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Any
+
+from fastmcp import Context
+from pydantic import Field
+
+from hpe_networking_mcp.platforms.greenlake._registry import tool
+from hpe_networking_mcp.platforms.greenlake.client import greenlake_request
+
+
+@tool(
+    name="greenlake_post_service_catalog_v1beta1_notifications_provision_response",
+    description="POST /service-catalog/v1beta1/notifications/provision-response\n\npostServiceProvisionResponse\n\nReceive a Notification from an internal service conveying the response for a Service Provision request",
+    tags={"greenlake", "greenlake_write", "requires_confirmation", "service_catalog"},
+    annotations={
+        "title": "Receive a Notification from an internal service conveying the response for a Service Provision request",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True,
+    },
+)
+async def greenlake_post_service_catalog_v1beta1_notifications_provision_response(
+    ctx: Context,
+    body: Annotated[dict[str, Any], Field(description="Request body (required)")],
+) -> Any:
+    return await greenlake_request(
+        ctx,
+        "POST",
+        "/service-catalog/v1beta1/notifications/provision-response",
+        body=body,
+    )

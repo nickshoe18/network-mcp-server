@@ -38,14 +38,29 @@ class TestGreenLakeRegistryPopulation:
         assert actual == expected, f"Mismatch — missing: {expected - actual}, extra: {actual - expected}"
 
     def test_expected_surface_size(self, greenlake_registry_populated):
-        """GreenLake has exactly 10 tools (2 per service × 5 services)."""
-        assert len(greenlake_registry_populated) == 10
+        """GreenLake has exactly 168 tools: 10 from the 5 original hand-written
+        services (audit-logs, devices, subscriptions, users, workspaces; 2 each),
+        plus 158 ported from upstream nowireless4u/hpe-networking-mcp's much larger
+        GreenLake surface -- only the networking-relevant slice (device_management,
+        subscription_management, tags, location_management, event, authorization,
+        service_catalog, reporting), not the ~172-module full upstream surface
+        (compute, storage, backup, virtualization, etc. were explicitly excluded).
+        """
+        assert len(greenlake_registry_populated) == 168
 
-    def test_greenlake_has_no_write_gate(self, greenlake_registry_populated):
-        """GreenLake is read-only today — no tool should carry a write tag."""
-        for name, spec in greenlake_registry_populated.items():
-            write_tags = {"greenlake_write", "greenlake_write_delete"}
-            assert not (spec.tags & write_tags), f"{name} unexpectedly carries a write tag"
+    def test_write_tools_carry_write_tags(self, greenlake_registry_populated):
+        """GreenLake gained its first write capability via the upstream port --
+        gating relies on the write tags being present on the registered spec."""
+        destructive = greenlake_registry_populated["greenlake_delete_locations_v1_locations_id"]
+        assert "greenlake_write_delete" in destructive.tags
+        assert "requires_confirmation" in destructive.tags
+
+        create = greenlake_registry_populated["greenlake_post_devices_v1_devices"]
+        assert "greenlake_write" in create.tags
+        assert "requires_confirmation" in create.tags
+
+        read_only = greenlake_registry_populated["greenlake_get_devices"]
+        assert not (read_only.tags & {"greenlake_write", "greenlake_write_delete"})
 
     def test_categories_derived_from_module_names(self, greenlake_registry_populated):
         """Category == source module short name."""

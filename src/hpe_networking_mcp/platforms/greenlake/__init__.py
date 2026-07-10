@@ -1,9 +1,22 @@
 """HPE GreenLake platform module.
 
-Consolidates the five original per-service MCP servers (audit-logs, devices,
-subscriptions, users, workspaces) into a single platform module, aligned with
-the shared dynamic-mode infrastructure used by Apstra, Mist, Central, and
-ClearPass.
+Consolidates a networking-relevant slice of the HPE GreenLake platform API
+into a single platform module, aligned with the shared dynamic-mode
+infrastructure used by Apstra, Mist, Central, and ClearPass.
+
+Five modules (audit-logs, devices, subscriptions, users, workspaces) are
+hand-written against the smaller official ``HewlettPackard/gl-mcp`` API
+surface. Everything else -- device_management, subscription_management,
+tags, location_management, event (subscriptions/webhooks), authorization
+(groups/role_assignments/scope_groups), service_catalog, and reporting --
+was ported from upstream ``nowireless4u/hpe-networking-mcp``'s much larger,
+spec-generated GreenLake tool set (which itself covers ~172 modules across
+compute, storage, backup, virtualization, etc.); only the networking-relevant
+subset was ported here, translated to this codebase's inline dict-annotation
+tool style (see ``client.py:greenlake_request`` for the shared HTTP
+transport). In particular, this replaces an earlier hand-built
+``reporting.py`` / ``service_catalog.py`` (built directly from ``gl-mcp``)
+with the fuller, per-resource upstream versions.
 """
 
 from __future__ import annotations
