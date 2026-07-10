@@ -14,9 +14,9 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 | Platform | Tools | Auth | Notes |
 |---|---|---|---|
 | Juniper Mist | 516 | API Token | Org: Stark Industries, org_id: 5f24e447-1145-4efa-94e0-ccec1a2a00a7, host: api.gc4.mist.com (Google Cloud 4) |
-| Aruba Central (New Central) | 404 | OAuth2 (client-credentials) | internal.api.central.arubanetworks.com |
+| Aruba Central (New Central) | 655 | OAuth2 (client-credentials) | internal.api.central.arubanetworks.com — includes CNAC (Cloud NAC) + device-collections tools ported from upstream `nowireless4u/hpe-networking-mcp` |
 | Classic Central | 5 | OAuth2 (refresh-token) | internal-apigw.central.arubanetworks.com — separate legacy API/product from New Central; needed for devices not yet migrated (e.g. Bat Cave's OfficeSwitch/GarageSwitch, template-managed). Refresh token rotates on every use — see `platforms/classic_central/client.py` |
-| HPE GreenLake | 10 | OAuth2 | global.api.greenlake.hpe.com |
+| HPE GreenLake | 168 | OAuth2 | global.api.greenlake.hpe.com — networking-relevant slice ported from upstream `nowireless4u/hpe-networking-mcp` (device_management, subscription_management, tags, location_management, event, authorization, service_catalog, reporting); first GreenLake platform with write tools (ENABLE_GREENLAKE_WRITE_TOOLS, default false) |
 | ClearPass | 84 | OAuth2 | https://10.10.20.5/api (private IP — needs VPN when remote) |
 | Aruba Axis | 12 | API Token | admin-api.axissecurity.com |
 | AOS8 / Mobility Conductor | 36 | Username/Password | https://10.10.20.7:4343 (ArubaMM-VA, AOS-8 8.13.2.2, self-signed cert — verify_ssl=false), private IP — needs VPN when remote |

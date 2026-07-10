@@ -359,6 +359,24 @@ def create_server(config: ServerConfig) -> FastMCP:
 
     _register_health(mcp)
 
+    # --- Cross-platform WLAN translation bridge (always registered, every mode).
+    # Unlike the legacy aggregators these wrap the canonical translation engine
+    # (which can't be imported inside the code-mode sandbox), so they must be
+    # reachable from execute() via call_tool — hence unconditional registration. ---
+    if config.mist or config.central:
+        from hpe_networking_mcp.platforms.translate_wlan import register as _register_translate_wlan
+
+        _register_translate_wlan(mcp)
+
+    # --- Cross-platform CONFIG translation bridge (AOS 8 → Central, every mode).
+    # Same rationale as translate_wlan: wraps the canonical engine for the 12
+    # non-WLAN config kinds (vlan / role / policy / net_group / AAA chain /
+    # gateway_cluster), reachable from the code-mode sandbox via call_tool. ---
+    if config.central:
+        from hpe_networking_mcp.platforms.translate_config import register as _register_translate_config
+
+        _register_translate_config(mcp)
+
     # --- Skills (markdown-defined multi-step procedures, always visible) ---
     # In dynamic mode, register via @mcp.tool — they appear at the top level
     # via the standard catalog. In CODE mode (default since v3.0.0.0), we
@@ -382,6 +400,8 @@ def create_server(config: ServerConfig) -> FastMCP:
         mcp.add_transform(Visibility(False, tags={"classic_central_write"}, components={"tool"}))
     if not config.enable_clearpass_write_tools:
         mcp.add_transform(Visibility(False, tags={"clearpass_write_delete"}, components={"tool"}))
+    if not config.enable_greenlake_write_tools:
+        mcp.add_transform(Visibility(False, tags={"greenlake_write", "greenlake_write_delete"}, components={"tool"}))
     if not config.enable_apstra_write_tools:
         mcp.add_transform(Visibility(False, tags={"apstra_write", "apstra_write_delete"}, components={"tool"}))
     if not config.enable_axis_write_tools:
@@ -394,8 +414,9 @@ def create_server(config: ServerConfig) -> FastMCP:
     # --- Tool-mode-specific catalog transforms ---
     if config.tool_mode == "dynamic":
         # Dynamic mode: hide the individual registry-managed tools so the
-        # exposed surface is just the per-platform meta-tools plus the 3
-        # cross-platform statics (health, site_health_check, manage_wlan_profile).
+        # exposed surface is just the per-platform meta-tools plus the
+        # cross-platform statics (health, site_health_check, manage_wlan_profile,
+        # translate_wlan_preview/apply, translate_config_preview/apply).
         # Tools opt in by being tagged "dynamic_managed" via their platform's
         # tool() shim; any platform that hasn't migrated yet keeps all its
         # tools visible regardless of tool_mode.
@@ -411,7 +432,10 @@ def create_server(config: ServerConfig) -> FastMCP:
         #
         # Cross-platform aggregators (site_health_check, site_rf_check,
         # manage_wlan_profile) were not registered above in code mode, so
-        # they don't leak into Search's catalog.
+        # they don't leak into Search's catalog. (health + translate_wlan_* +
+        # translate_config_* ARE registered in every mode — they wrap
+        # engines/probes the sandbox can't import, so they must be
+        # call_tool-able.)
         _register_code_mode(mcp, config.code_sandbox_max_duration_secs)
 
     return mcp
@@ -540,7 +564,7 @@ def _register_code_mode(mcp: FastMCP, max_duration_secs: float = 30.0) -> None:
         "code block when `skills_list` returns no applicable skill "
         "(issue #338).\n\n"
         "In scope: `await call_tool(name: str, params: dict) -> Any`.\n\n"
-        "`call_tool` reaches three things:\n"
+        "`call_tool` reaches these:\n"
         "  - `<platform>_invoke_tool(name=<tool>, params=<dict>)` — the "
         "universal way to call ANY per-platform tool (mist / central / "
         "greenlake / clearpass / apstra / axis / aos8). The ~1000 "
@@ -551,7 +575,16 @@ def _register_code_mode(mcp: FastMCP, max_duration_secs: float = 30.0) -> None:
         "by name, e.g. `await call_tool('uxi_list_sensors', {})`.\n"
         "  - `<platform>_list_tools` / `<platform>_get_tool_schema` — "
         "per-platform discovery meta-tools.\n"
-        "  - `health` — cross-platform reachability.\n\n"
+        "  - `health` — cross-platform reachability.\n"
+        "  - `translate_wlan_preview` / `translate_wlan_apply` — translate a "
+        "WLAN between platforms (mist/central/aos8 → central/mist) via the "
+        "canonical translation engine; preview is read-only, apply is "
+        "target-write-gated + confirmed. Callable by name directly.\n"
+        "  - `translate_config_preview` / `translate_config_apply` — same "
+        "engine for the 12 non-WLAN AOS8→Central config kinds (vlan_id / "
+        "named_vlan / net_group / role / policy / the AAA chain / "
+        "gateway_cluster); preview is read-only, apply is write-gated + "
+        "confirmed. Callable by name directly.\n\n"
         "Discovery from inside execute(): if you don't know a platform's "
         'tool names, call `<platform>_list_tools(filter="...")` (e.g. '
         "`await call_tool('mist_list_tools', {'filter': 'site'})`) to get "
