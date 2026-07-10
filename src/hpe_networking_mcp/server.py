@@ -231,6 +231,10 @@ async def lifespan(server: FastMCP):
         except Exception as e:
             logger.warning("Startup probe loop raised unexpectedly — {}", e)
 
+    from hpe_networking_mcp.health_routes import mark_ready
+
+    mark_ready(server)
+
     try:
         yield context
     finally:
@@ -381,6 +385,12 @@ def create_server(config: ServerConfig) -> FastMCP:
     from hpe_networking_mcp.platforms.health import register as _register_health
 
     _register_health(mcp)
+
+    # --- Plain HTTP health endpoints (Kubernetes/Docker probes, every mode).
+    # No MCP negotiation, no upstream platform calls -- see health_routes.py. ---
+    from hpe_networking_mcp.health_routes import register_health_routes
+
+    register_health_routes(mcp, config)
 
     # --- Cross-platform WLAN translation bridge (always registered, every mode).
     # Unlike the legacy aggregators these wrap the canonical translation engine

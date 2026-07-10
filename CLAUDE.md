@@ -7,8 +7,9 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 - `netops-frontend` (port 3000) — React web UI via Nginx
 
 ## MCP Servers in Claude Code
-- `hpe-networking-mcp` — 7 platforms: Mist, Central, GreenLake, ClearPass, Axis, AOS8, UXI
-- `juniper-mist-official` — Official Juniper Mist MCP (Marvis Actions, full Mist surface)
+- `hpe-networking-mcp` — 9 platforms: Mist, Central, Classic Central, GreenLake, ClearPass, Axis, AOS8, UXI, Juniper Security Director Cloud
+- `juniper-mist-official` — Official Juniper Mist MCP, connected (Bearer token auth, header `X-Mist-Base-URL: api.gc4.mist.com`) — Marvis Actions confirmed working, full Mist surface
+- Primary working environment is now VS Code, with `.mcp.json` checked into the repo root
 
 ## Connected Platforms (hpe-networking-mcp)
 | Platform | Tools | Auth | Notes |
@@ -17,10 +18,10 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 | Aruba Central (New Central) | 655 | OAuth2 (client-credentials) | internal.api.central.arubanetworks.com — includes CNAC (Cloud NAC) + device-collections tools ported from upstream `nowireless4u/hpe-networking-mcp` |
 | Classic Central | 5 | OAuth2 (refresh-token) | internal-apigw.central.arubanetworks.com — separate legacy API/product from New Central; needed for devices not yet migrated (e.g. Bat Cave's OfficeSwitch/GarageSwitch, template-managed). Refresh token rotates on every use — see `platforms/classic_central/client.py` |
 | HPE GreenLake | 168 | OAuth2 | global.api.greenlake.hpe.com — networking-relevant slice ported from upstream `nowireless4u/hpe-networking-mcp` (device_management, subscription_management, tags, location_management, event, authorization, service_catalog, reporting); first GreenLake platform with write tools (ENABLE_GREENLAKE_WRITE_TOOLS, default false) |
-| ClearPass | 84 | OAuth2 | https://10.10.20.5/api (private IP — needs VPN when remote) |
-| Aruba Axis | 12 | API Token | admin-api.axissecurity.com |
-| AOS8 / Mobility Conductor | 36 | Username/Password | https://10.10.20.7:4343 (ArubaMM-VA, AOS-8 8.13.2.2, self-signed cert — verify_ssl=false), private IP — needs VPN when remote |
-| UXI | 11 | OAuth2 | 1 sensor: VNS9LPM0JP (UX-G6EC, Wayne Enterprises group, Rockwall TX) |
+| ClearPass | 84 | OAuth2 | https://10.10.20.5/api (private IP — needs VPN when remote); reconnected after server rebuild, credentials unchanged |
+| Aruba Axis | 25 | API Token | admin-api.axissecurity.com — includes staged write tools (ENABLE_AXIS_WRITE_TOOLS, default false) |
+| AOS8 / Mobility Conductor | 47 | Username/Password | https://10.10.20.7:4343 (ArubaMM-VA, AOS-8 8.13.2.2, self-signed cert — verify_ssl=false), private IP — needs VPN when remote |
+| UXI | 21 | OAuth2 | 1 sensor: VNS9LPM0JP (UX-G6EC, Wayne Enterprises group, Rockwall TX); includes write tools (sensors/groups/agents/assignments) |
 | Juniper Security Director Cloud | 4 | Static API key (`x-api-key` header) | api.sdcloud.juniperclouds.net — SD-WAN/SASE site-and-device orchestration (devices, sites); confirmed against the real OpenAPI spec, no firewall security-policy/NAT/address-object API found in that spec. New platform, first pass — read-only |
 
 ## Secrets Folder
@@ -55,7 +56,7 @@ Both volume-mounted into the hpe-mcp container at runtime.
 - URL: http://localhost:3000
 - Backend: Node.js at port 3001, connects to hpe-mcp:8000/mcp via local MCP proxy
 - System prompt in: `netops-ui/backend/src/routes/chat.js`
-- Health endpoint: `netops-ui/backend/src/routes/health.js` (hardcoded ok — MCP /health returns 404)
+- Health endpoint: `netops-ui/backend/src/routes/health.js` (hardcoded ok). The MCP server itself now exposes real plain-HTTP `/livez`, `/readyz`, `/healthz` (ported from upstream, ~2026-07-10) — no MCP negotiation, no upstream platform calls, safe for Docker/Kubernetes probes. Deep per-platform reachability stays behind the MCP `health` tool
 - Tool limit: 6 meta-tools exposed to UI (execute, search, tags, skills_list, skills_load, get_schema)
 
 ## Network Inventory
@@ -82,12 +83,5 @@ https://github.com/nickshoe18/network-mcp-server
 - VM hosting on ESXi (Ubuntu 22.04, Docker, clone repo, scp secrets)
 - Juniper Apstra credentials (disabled — needs apstra_server, apstra_username, apstra_password)
 - Update all three Word docs to reflect latest architecture
-
-Please update CLAUDE.md to add:
-- juniper-mist-official MCP server is now connected (Bearer token auth, X-Mist-Base-URL: api.gc4.mist.com)
-- Marvis Actions confirmed working - 11 findings in Stark Industries org
-- StarkTowerSW01 has recurring disconnect pattern (6 events) - needs investigation
-- AP c8:78:67:08:56:ea offline at Stark Tower connected to StarkTowerSW01 ge-0/0/0
-- VS Code is now the primary working environment with .mcp.json in repo root
-- Mist token needs rotation (was exposed in chat)
-- ClearPass reconnected after server rebuild - credentials unchanged
+- **Security**: Mist API token needs rotation — it was exposed in chat earlier in the session
+- StarkTowerSW01's recurring disconnect pattern (6 events) still needs root-cause investigation
