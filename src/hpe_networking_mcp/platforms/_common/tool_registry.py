@@ -32,6 +32,16 @@ class ToolSpec:
     category: str
     description: str = ""
     tags: set[str] = field(default_factory=set)
+    # Optional capability classification (e.g. "read", "write", "write_delete").
+    # None for the vast majority of existing tools, which classify write-gating
+    # via ``tags`` instead (see ``_WRITE_TAG_BY_PLATFORM`` below) -- this field
+    # exists only so the universal confirmation gate (``requires_confirmation``
+    # tag, see ``middleware/elicitation.py:confirm_gated_invoke``) has somewhere
+    # to read from for tools that opt into it explicitly. Never fail-closed on
+    # ``capability is None`` here -- unlike upstream, not every tool in this
+    # codebase has been migrated to explicit capability classification, so an
+    # unset capability must NOT be treated as "needs confirmation".
+    capability: str | None = None
 
 
 # One dict per platform, keyed by tool name. Populated by each platform's
@@ -70,7 +80,7 @@ _WRITE_TAG_BY_PLATFORM: dict[str, set[str]] = {
     "central": {"central_write_delete"},
     "classic_central": {"classic_central_write"},
     "clearpass": {"clearpass_write_delete"},
-    "greenlake": set(),  # GreenLake is read-only today.
+    "greenlake": {"greenlake_write", "greenlake_write_delete"},
     "mist": {"mist_write", "mist_write_delete"},
     "uxi": {"uxi_write", "uxi_write_delete"},
     "_template": {"_template_write", "_template_write_delete"},
@@ -83,7 +93,7 @@ _GATE_CONFIG_ATTR: dict[str, str | None] = {
     "central": "enable_central_write_tools",
     "classic_central": "enable_classic_central_write_tools",
     "clearpass": "enable_clearpass_write_tools",
-    "greenlake": None,
+    "greenlake": "enable_greenlake_write_tools",
     "mist": "enable_mist_write_tools",
     "uxi": "enable_uxi_write_tools",
     "_template": None,  # Never instantiated at runtime; gating attr unused.

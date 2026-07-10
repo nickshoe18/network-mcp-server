@@ -25,6 +25,7 @@ from mcp.types import ToolAnnotations
 from pydantic import ConfigDict, ValidationError, create_model
 from pydantic.fields import FieldInfo
 
+from hpe_networking_mcp.middleware.elicitation import confirm_gated_invoke
 from hpe_networking_mcp.platforms._common.tool_registry import (
     REGISTRIES,
     ToolSpec,
@@ -448,6 +449,33 @@ def build_meta_tools(
             }
 
         safe_params = params or {}
+
+        # Universal confirmation gate: confirm-before-dispatch for any tool
+        # explicitly carrying the requires_confirmation tag. Unlike upstream,
+        # this does NOT fail-closed on an unclassified tool (no capability
+        # set) -- see the module docstring in middleware/elicitation.py for
+        # why: almost none of this codebase's existing tools have been
+        # migrated to explicit capability classification yet, so treating an
+        # unset capability as "needs confirmation" would gate every read tool
+        # too. Only tools that opt in via the tag are affected here.
+        #
+        # ``confirmed`` is a legitimate parameter on most EXISTING write tools
+        # in this codebase (their own inline confirm_write/elicitation_handler
+        # pattern), so it must only be stripped for tools that went through
+        # THIS gate -- stripping it unconditionally would break every existing
+        # write tool's own confirmation flow.
+        is_gated = "requires_confirmation" in spec.tags
+        dispatch_params = safe_params
+        if is_gated:
+            gate = await confirm_gated_invoke(
+                ctx,
+                f"{platform} tool '{name}' ({_tool_summary(spec, max_len=120)})",
+                safe_params,
+            )
+            if gate is not None:
+                return gate
+            dispatch_params = {k: v for k, v in safe_params.items() if k != "confirmed"}
+
         logger.info(
             "{}_invoke_tool: dispatching {} with {} param(s)",
             platform,
@@ -462,7 +490,7 @@ def build_meta_tools(
         # attribute 'value'`` because the meta-tool bypasses FastMCP's
         # normal dispatch wrapper.
         try:
-            coerced = _coerce_params(spec, safe_params)
+            coerced = _coerce_params(spec, dispatch_params)
         except ValidationError as exc:
             return {
                 "status": "invalid_params",
