@@ -7,7 +7,7 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 - `netops-frontend` (port 3000) — React web UI via Nginx
 
 ## MCP Servers in Claude Code
-- `hpe-networking-mcp` — 9 platforms: Mist, Central, Classic Central, GreenLake, ClearPass, Axis, AOS8, UXI, Juniper Security Director Cloud
+- `hpe-networking-mcp` — 10 platforms: Mist, Central, Classic Central, GreenLake, ClearPass, Axis, AOS8, UXI, Juniper Security Director Cloud, Juniper SRX (NETCONF)
 - `juniper-mist-official` — Official Juniper Mist MCP, connected (Bearer token auth, header `X-Mist-Base-URL: api.gc4.mist.com`) — Marvis Actions confirmed working, full Mist surface
 - Primary working environment is now VS Code, with `.mcp.json` checked into the repo root
 
@@ -23,6 +23,7 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 | AOS8 / Mobility Conductor | 47 | Username/Password | https://10.10.20.7:4343 (ArubaMM-VA, AOS-8 8.13.2.2, self-signed cert — verify_ssl=false), private IP — needs VPN when remote |
 | UXI | 21 | OAuth2 | 1 sensor: VNS9LPM0JP (UX-G6EC, Wayne Enterprises group, Rockwall TX); includes write tools (sensors/groups/agents/assignments) |
 | Juniper Security Director Cloud | 4 | Static API key (`x-api-key` header) | api.sdcloud.juniperclouds.net — SD-WAN/SASE site-and-device orchestration (devices, sites); confirmed against the real OpenAPI spec, no firewall security-policy/NAT/address-object API found in that spec. New platform, first pass — read-only |
+| Juniper SRX (NETCONF) | 2 | Username/Password (NETCONF-over-SSH, port 830, via PyEZ/`junos-eznc`) | Direct CLI access to fill the Security Director Cloud policy-API gap above. `srx_get_facts` + `srx_show_command` (restricted to read-only `show ...`, which also covers full/hierarchy-filtered config export via `show configuration [hierarchy]`). Read-only first pass, no write/commit tools yet. **Not yet live-verified** — NETCONF isn't enabled on StarkWANEdge yet (`set system services netconf ssh`), and no `srx_*` secrets exist yet |
 
 ## Secrets Folder
 `~/hpe-networking-mcp/secrets/` — one file per credential, gitignored
@@ -69,8 +70,11 @@ Both volume-mounted into the hpe-mcp container at runtime.
 - Site: Stark Tower (59f74351-5c94-49bf-adea-dc96f4b132bf), Rockwall TX
 - Switch: StarkTowerSW01 (EX3400-48P, MAC 045c6c556ee2) — recurring disconnect events
 - AP: c8:78:67:08:56:ea (AP45-US) — currently offline, connected to StarkTowerSW01 ge-0/0/0
-- Gateway: StarkWANEdge (SRX300, MAC 0c812665a868)
 - Marvis: 11 actions, DFS radar on channels 116/120/124/128 (self-driven), gateway firmware auto-upgraded
+- Note: StarkWANEdge (SRX300) was removed from Mist management — see Security Director Cloud below
+
+### Juniper Security Director Cloud
+- StarkWANEdge (SRX300, MAC 0c812665a868) — moved here from Mist; this is now the SRX's management plane of record. SD Cloud's API has no firewall security-policy/NAT/address-object CRUD, so day-to-day policy config on this device still needs a CLI/NETCONF path (see Pending Items)
 
 ## GitHub Repo
 https://github.com/nickshoe18/network-mcp-server
@@ -85,3 +89,5 @@ https://github.com/nickshoe18/network-mcp-server
 - Update all three Word docs to reflect latest architecture
 - **Security**: Mist API token needs rotation — it was exposed in chat earlier in the session
 - StarkTowerSW01's recurring disconnect pattern (6 events) still needs root-cause investigation
+- **SRX platform needs live verification**: enable NETCONF on StarkWANEdge (`set system services netconf ssh`) and create `secrets/srx_host`, `secrets/srx_username`, `secrets/srx_password` — then confirm `srx_get_facts`/`srx_show_command` actually work against the real device
+- Once SRX read-only is confirmed live, consider write/commit tools (security policy, NAT, address-book) — must require `commit confirmed` auto-rollback plus the existing `confirm_gated_invoke` gate given how easily a bad policy push can sever the managing session

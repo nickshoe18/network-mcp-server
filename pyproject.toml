@@ -35,6 +35,7 @@ dependencies = [
     "treelib>=1.7.0",
     # Aruba ClearPass API client
     "pyclearpass>=1.0.0",
+    "junos-eznc>=2.8.2",
 ]
 
 [project.scripts]

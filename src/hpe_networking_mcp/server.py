@@ -205,6 +205,21 @@ async def lifespan(server: FastMCP):
         context["security_director_client"] = None
         context["security_director_config"] = None
 
+    # --- SRX ---
+    if config.srx:
+        try:
+            from hpe_networking_mcp.platforms.srx.client import SRXClient
+
+            context["srx_client"] = SRXClient(config.srx)
+            context["srx_config"] = config.srx
+        except Exception as e:
+            logger.warning("SRX: failed to initialize -- {}", e)
+            context["srx_client"] = None
+            context["srx_config"] = None
+    else:
+        context["srx_client"] = None
+        context["srx_config"] = None
+
     # --- Verify every enabled platform via the shared probe helpers from
     # platforms/health.py. One source of truth: startup log output and the
     # runtime ``health`` tool report the same status. Probes that fail do
@@ -278,6 +293,12 @@ async def lifespan(server: FastMCP):
                 await security_director.aclose()
             except Exception as e:  # noqa: BLE001
                 logger.warning("Security Director: aclose failed during shutdown — {}", e)
+        srx = context.get("srx_client")
+        if srx is not None:
+            try:
+                await srx.aclose()
+            except Exception as e:  # noqa: BLE001
+                logger.warning("SRX: aclose failed during shutdown — {}", e)
         logger.info("Server shutdown complete")
 
 
@@ -363,6 +384,8 @@ def create_server(config: ServerConfig) -> FastMCP:
         _register_uxi_tools(mcp, config)
     if config.security_director:
         _register_security_director_tools(mcp, config)
+    if config.srx:
+        _register_srx_tools(mcp, config)
 
     # --- Cross-platform aggregators ---
     # These are workarounds for dynamic mode's "AI picks one platform and stops"
@@ -749,6 +772,14 @@ def _register_security_director_tools(mcp: FastMCP, config: ServerConfig) -> Non
 
     count = register_tools(mcp, config)
     logger.info("Security Director: registered {} tools", count)
+
+
+def _register_srx_tools(mcp: FastMCP, config: ServerConfig) -> None:
+    """Register all SRX platform tools."""
+    from hpe_networking_mcp.platforms.srx import register_tools
+
+    count = register_tools(mcp, config)
+    logger.info("SRX: registered {} tools", count)
 
 
 def _register_sync_tools(mcp: FastMCP) -> None:

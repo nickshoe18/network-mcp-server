@@ -36,6 +36,10 @@ Secret file mapping:
     /run/secrets/uxi_client_secret
     /run/secrets/security_director_base_url
     /run/secrets/security_director_api_key
+    /run/secrets/srx_host
+    /run/secrets/srx_port (optional, default 830)
+    /run/secrets/srx_username
+    /run/secrets/srx_password
 """
 
 import os
@@ -147,6 +151,23 @@ class SecurityDirectorSecrets:
 
 
 @dataclass
+class SRXSecrets:
+    """Juniper SRX NETCONF-over-SSH credentials.
+
+    Same username/password used for a normal device SSH login -- NETCONF
+    isn't a separate credential system, just a different subsystem on the
+    same SSH session (``set system services netconf ssh``). Read-only
+    first pass (issue: no write tools yet) -- see
+    ``platforms/srx/client.py``.
+    """
+
+    host: str
+    username: str
+    password: str
+    port: int = 830
+
+
+@dataclass
 class ServerConfig:
     """Global server configuration."""
 
@@ -221,6 +242,7 @@ class ServerConfig:
     aos8: AOS8Secrets | None = None
     uxi: UXISecrets | None = None
     security_director: SecurityDirectorSecrets | None = None
+    srx: SRXSecrets | None = None
 
     @property
     def enabled_platforms(self) -> list[str]:
@@ -245,6 +267,8 @@ class ServerConfig:
             platforms.append("uxi")
         if self.security_director:
             platforms.append("security_director")
+        if self.srx:
+            platforms.append("srx")
         return platforms
 
 
@@ -578,6 +602,39 @@ def _load_security_director() -> SecurityDirectorSecrets | None:
     return SecurityDirectorSecrets(base_url=base_url, api_key=api_key)
 
 
+def _load_srx() -> SRXSecrets | None:
+    """Load Juniper SRX NETCONF credentials from Docker secrets."""
+    host = _read_secret("srx_host")
+    port_str = _read_secret("srx_port")
+    username = _read_secret("srx_username")
+    password = _read_secret("srx_password")
+
+    missing = []
+    if not host:
+        missing.append("srx_host")
+    if not username:
+        missing.append("srx_username")
+    if not password:
+        missing.append("srx_password")
+
+    if missing:
+        logger.info("SRX: disabled (missing secrets: {})", ", ".join(missing))
+        return None
+
+    assert host is not None
+    assert username is not None
+    assert password is not None
+
+    try:
+        port = int(port_str) if port_str else 830
+    except ValueError:
+        logger.warning("SRX: invalid srx_port value '{}', defaulting to 830", port_str)
+        port = 830
+
+    logger.info("SRX: credentials loaded (host: {}, port: {}, user: {})", host, port, username)
+    return SRXSecrets(host=host, username=username, password=password, port=port)
+
+
 def load_config() -> ServerConfig:
     """Load server configuration from Docker secrets and environment variables.
 
@@ -680,6 +737,7 @@ def load_config() -> ServerConfig:
     aos8 = _load_aos8()
     uxi = _load_uxi()
     security_director = _load_security_director()
+    srx = _load_srx()
 
     config = ServerConfig(
         port=port,
@@ -712,6 +770,7 @@ def load_config() -> ServerConfig:
         aos8=aos8,
         uxi=uxi,
         security_director=security_director,
+        srx=srx,
     )
 
     if not config.enabled_platforms:

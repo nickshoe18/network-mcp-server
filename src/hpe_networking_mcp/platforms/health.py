@@ -40,6 +40,7 @@ _ALL_PLATFORMS: tuple[str, ...] = (
     "aos8",
     "uxi",
     "security_director",
+    "srx",
 )
 
 
@@ -261,6 +262,18 @@ async def _probe_security_director(ctx: Context) -> dict[str, Any]:
         return {"status": "degraded", "message": f"Security Director probe failed: {e}"}
 
 
+async def _probe_srx(ctx: Context) -> dict[str, Any]:
+    """Probe the Juniper SRX NETCONF platform."""
+    client = ctx.lifespan_context.get("srx_client")
+    if client is None:
+        return {"status": "unavailable", "message": "SRX is not configured or failed to initialize"}
+    try:
+        facts = await client.health_check()
+        return {"status": "ok", "message": "SRX NETCONF session reachable", **facts}
+    except Exception as e:
+        return {"status": "degraded", "message": f"SRX probe failed: {e}"}
+
+
 _PROBES = {
     "mist": _probe_mist,
     "central": _probe_central,
@@ -272,6 +285,7 @@ _PROBES = {
     "aos8": _probe_aos8,
     "uxi": _probe_uxi,
     "security_director": _probe_security_director,
+    "srx": _probe_srx,
 }
 
 
