@@ -78,7 +78,7 @@ Both volume-mounted into the hpe-mcp container at runtime.
 
 ## GitHub Repo
 https://github.com/nickshoe18/network-mcp-server
-- docs/ — Word documents (Tool Reference, macOS guide, Windows guide)
+- docs/ — Word documents: Tool Reference, legacy Claude Desktop macOS/Windows guides (v2.0/v3.0/v3.1, stale — predate Classic Central/GreenLake expansion/Security Director/SRX), and current `HPE_Networking_MCP_VSCode_Setup_{macOS,Windows11}.docx` v1.0 (VS Code + Claude Code extension, all 10 platforms)
 - netops-ui/ — full stack (backend, frontend, nginx, docker-compose)
 - docker-entrypoint.sh, zscaler-full-chain.pem — Zscaler fix
 - secrets/ and .env gitignored
@@ -86,7 +86,7 @@ https://github.com/nickshoe18/network-mcp-server
 ## Pending Items
 - VM hosting on ESXi (Ubuntu 22.04, Docker, clone repo, scp secrets)
 - Juniper Apstra credentials (disabled — needs apstra_server, apstra_username, apstra_password)
-- Update all three Word docs to reflect latest architecture
+- Legacy Claude Desktop Word docs (Tool Reference, macOS/Windows v3.1) still need updating to reflect latest architecture — the new VS Code guides only cover the VS Code path
 - **Security**: Mist API token needs rotation — it was exposed in chat earlier in the session
 - StarkTowerSW01's recurring disconnect pattern (6 events) still needs root-cause investigation
 - **SRX platform needs live verification**: enable NETCONF on StarkWANEdge (`set system services netconf ssh`) and create `secrets/srx_host`, `secrets/srx_username`, `secrets/srx_password` — then confirm `srx_get_facts`/`srx_show_command` actually work against the real device
