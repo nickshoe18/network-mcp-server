@@ -34,7 +34,11 @@ async def classic_central_get_devices(
     """
     try:
         client = await get_classic_central_client()
-        payload = await client.get_json(f"/monitoring/v1/{device_type}", params={"limit": limit, "offset": offset})
+        # "aps" is v2 -- confirmed live (v1 404s). Every other device_type is v1.
+        api_version = "v2" if device_type == "aps" else "v1"
+        payload = await client.get_json(
+            f"/monitoring/{api_version}/{device_type}", params={"limit": limit, "offset": offset}
+        )
         return payload.get(device_type, payload) if isinstance(payload, dict) else payload
     except Exception as e:
         return f"Error fetching devices: {format_http_error(e) if hasattr(e, 'response') else e}"

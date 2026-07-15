@@ -37,6 +37,13 @@ from hpe_networking_mcp.translations.readers.aos8 import (
     aos8_read_wlan,
 )
 from hpe_networking_mcp.translations.readers.central import central_read_wlan
+from hpe_networking_mcp.translations.readers.classic_central import (
+    classic_central_read_ap_uplink,
+    classic_central_read_named_vlan,
+    classic_central_read_policy,
+    classic_central_read_skeletal_role,
+    classic_central_read_wlan,
+)
 from hpe_networking_mcp.translations.readers.mist import mist_read_wlan
 from hpe_networking_mcp.translations.writers.central import central_write_wlan
 from hpe_networking_mcp.translations.writers.central_auth import central_write_profile
@@ -70,12 +77,23 @@ CAPTIVE_PORTAL = "captive_portal"
 AAA_PROFILE = "aaa_profile"
 GATEWAY_CLUSTER = "gateway_cluster"
 POLICY = "policy"
+# Classic Central only: a skeletal Central "role" library object (name +
+# optional vlan) -- NOT the same as AOS8's rich gateway-oriented CanonicalRole
+# kind (ROLE, above). Reuses CanonicalCentralProfile + central_write_profile,
+# the same generic shape/writer the AAA-chain kinds already use.
+SKELETAL_ROLE = "skeletal_role"
+# Classic Central only: a Central "ap-uplink" library object (preemption +
+# failover settings). Confirmed real schema in
+# platforms/central/_config_payload_schemas.json. Also reuses
+# CanonicalCentralProfile + central_write_profile.
+AP_UPLINK = "ap_uplink"
 
 # (source_platform, kind) -> reader(source_obj, **ctx) -> canonical
 _READERS: dict[tuple[str, str], Callable[..., Any]] = {
     ("mist", WLAN): mist_read_wlan,
     ("aos8", WLAN): aos8_read_wlan,
     ("central", WLAN): central_read_wlan,
+    ("classic_central", WLAN): classic_central_read_wlan,
     ("aos8", VLAN_ID): aos8_read_vlan_id,
     ("aos8", NAMED_VLAN): aos8_read_named_vlan,
     ("aos8", NET_GROUP): aos8_read_net_group,
@@ -88,6 +106,10 @@ _READERS: dict[tuple[str, str], Callable[..., Any]] = {
     ("aos8", AAA_PROFILE): aos8_read_aaa_profile,
     ("aos8", GATEWAY_CLUSTER): aos8_read_gateway_cluster,
     ("aos8", POLICY): aos8_read_policy,
+    ("classic_central", NAMED_VLAN): classic_central_read_named_vlan,
+    ("classic_central", POLICY): classic_central_read_policy,
+    ("classic_central", SKELETAL_ROLE): classic_central_read_skeletal_role,
+    ("classic_central", AP_UPLINK): classic_central_read_ap_uplink,
 }
 
 # (target_platform, kind) -> ordered list of writer(canon, **ctx) -> [call descriptors].
@@ -108,6 +130,8 @@ _WRITERS: dict[tuple[str, str], list[Callable[..., list[dict[str, Any]]]]] = {
     ("central", AAA_PROFILE): [central_write_profile],
     ("central", GATEWAY_CLUSTER): [central_write_gateway_cluster],
     ("central", POLICY): [central_write_policy],
+    ("central", SKELETAL_ROLE): [central_write_profile],
+    ("central", AP_UPLINK): [central_write_profile],
 }
 
 

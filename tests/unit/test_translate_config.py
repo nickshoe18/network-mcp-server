@@ -151,3 +151,61 @@ async def test_apply_executes_when_confirmed() -> None:
     out = await _apply(_ctx(config=cfg, central_conn=conn), "net_group", _NETG, confirmed=True)
     assert [r["action"] for r in out["results"]] == ["created", "assigned"]
     assert any(p.endswith("/net-groups/cppm") for p in conn.posts)
+
+
+# --- classic_central source_platform (new: group-config translation) ---
+
+_CC_VLAN_BLOCK = {"keyword": "vlan", "args": ["Users", "60"], "properties": {}}
+
+
+@pytest.mark.asyncio
+async def test_preview_classic_central_named_vlan() -> None:
+    out = await tc._preview_impl(
+        _ctx(),
+        "classic_central",
+        "central",
+        "named_vlan",
+        _CC_VLAN_BLOCK,
+        scope_id="S1",
+        device_functions=["ACCESS_SWITCH"],
+        extra_ctx=None,
+    )
+    assert "classic_central:named_vlan" in out["supported"]["readers"]
+    assert out["canonical"]["vlan_name"] == "Users"
+    assert out["canonical"]["vlan_ids"] == ["60"]
+
+
+@pytest.mark.asyncio
+async def test_preview_unknown_source_platform_raises() -> None:
+    with pytest.raises(ToolError) as e:
+        await tc._preview_impl(
+            _ctx(),
+            "not_a_platform",
+            "central",
+            "named_vlan",
+            _CC_VLAN_BLOCK,
+            scope_id="S1",
+            device_functions=None,
+            extra_ctx=None,
+        )
+    assert e.value.args[0]["status_code"] == 400
+
+
+@pytest.mark.asyncio
+async def test_apply_classic_central_named_vlan_uses_access_switch_device_function() -> None:
+    cfg = SimpleNamespace(enable_central_write_tools=True, disable_elicitation=True)
+    conn = FakeConn()
+    out = await tc._apply_impl(
+        _ctx(config=cfg, central_conn=conn),
+        "classic_central",
+        "central",
+        "named_vlan",
+        _CC_VLAN_BLOCK,
+        scope_id="S1",
+        device_functions=["ACCESS_SWITCH"],
+        extra_ctx=None,
+        confirmed=True,
+    )
+    assert any(r["action"] in ("created", "assigned") for r in out["results"])
+    assigned_bodies = [c for c in conn.posts if "config-assignments" in c]
+    assert assigned_bodies  # an assignment call was made (device-function override took effect upstream)

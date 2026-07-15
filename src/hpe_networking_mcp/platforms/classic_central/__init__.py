@@ -25,6 +25,10 @@ TOOLS: dict[str, list[str]] = {
         "classic_central_get_variables",
         "classic_central_manage_variables",
     ],
+    "group_config": [
+        "classic_central_get_group_config",
+        "classic_central_get_groups",
+    ],
 }
 
 

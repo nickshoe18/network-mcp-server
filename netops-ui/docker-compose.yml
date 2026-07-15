@@ -25,6 +25,7 @@ services:
       - ENABLE_CLEARPASS_WRITE_TOOLS=${ENABLE_CLEARPASS_WRITE_TOOLS:-false}
       - ENABLE_GREENLAKE_WRITE_TOOLS=${ENABLE_GREENLAKE_WRITE_TOOLS:-false}
       - ENABLE_AOS8_WRITE_TOOLS=${ENABLE_AOS8_WRITE_TOOLS:-false}
+      - MCP_TOOL_MODE=${MCP_TOOL_MODE:-code}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]

@@ -33,7 +33,7 @@ from hpe_networking_mcp.translations import orchestrator
 from hpe_networking_mcp.utils.logging import logger
 
 _REDACT = "***REDACTED***"
-_SOURCES = ("mist", "central", "aos8")
+_SOURCES = ("mist", "central", "aos8", "classic_central")
 _TARGETS = ("central", "mist")
 
 
@@ -152,12 +152,23 @@ async def _build_plan(
         source_obj, reader_ctx = await _fetch_mist_source(ctx, ssid)
     elif source_platform == "central":
         source_obj, reader_ctx = await _fetch_central_source(ctx, ssid)
-    else:  # aos8 — by-SSID auto-fetch isn't a clean primitive (SSID lives in ssid_prof)
+    elif source_platform == "aos8":
+        # by-SSID auto-fetch isn't a clean primitive (SSID lives in ssid_prof)
         raise ToolError(
             {
                 "status_code": 400,
                 "message": "aos8 source requires source_override (the virtual_ap) + "
                 "context_override.reader_ctx (ssid_profiles/aaa_profiles/server_groups/auth_servers)",
+            }
+        )
+    else:  # classic_central — same shape: fetch the group config + parse it first, then supply the block
+        raise ToolError(
+            {
+                "status_code": 400,
+                "message": "classic_central source requires source_override (one 'wlan ssid-profile' "
+                "block from classic_central_get_group_config, parsed via "
+                "translations.readers.classic_central.parse_cli_blocks) + context_override.reader_ctx "
+                "(auth_servers: the group's 'wlan auth-server' blocks)",
             }
         )
     if source_platform == "aos8":

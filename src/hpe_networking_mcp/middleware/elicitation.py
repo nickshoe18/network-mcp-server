@@ -260,6 +260,16 @@ async def confirm_gated_invoke(
     3. Only when the prompt RAISES (client genuinely cannot present one) is
        ``confirmed=true`` honored as the popup-less chat fallback. An AI
        cannot self-authorize while a human-facing prompt is available.
+    4. A bare ``DeclinedElicitation`` result (as opposed to an explicit
+       ``approve=false`` answer) is treated the same way as step 3, NOT as a
+       real decline -- confirmed empirically against a real client that
+       renders no UI at all and returns this as its silent default. The
+       explicit ``AcceptedElicitation(data=False)`` and ``CancelledElicitation``
+       results remain real, final signals. This still never lets
+       ``confirmed=true`` bypass on a first attempt; it only substitutes the
+       channel a human's real approval arrives through (chat text instead of
+       a rendered dialog) for clients whose elicitation support is broken in
+       this specific way.
 
     Args:
         ctx: FastMCP context of the invoke call.
@@ -345,10 +355,37 @@ async def confirm_gated_invoke(
         case AcceptedElicitation(data=True):
             return None
         case AcceptedElicitation():
+            # The human was shown the required approve/deny field and explicitly
+            # answered false -- a real, deliberate rejection. Final.
             return {"status": "declined", "message": "Action not approved (approve was not set to true)."}
         case DeclinedElicitation():
-            return {"status": "declined", "message": "Action declined by user."}
+            # Ambiguous by construction: some clients return this when a human
+            # genuinely dismissed the prompt, but at least one real client
+            # (confirmed empirically) returns it as the SDK default when NO
+            # prompt was ever rendered at all -- the human never saw anything.
+            # A genuine deliberate "no" already took the AcceptedElicitation(data=False)
+            # branch above, so a bare Declined here is treated as "we don't know
+            # whether a human actually saw this" rather than a real decline.
+            # Fall through to the same popup-less chat-confirm relay the legacy
+            # confirm_write()/elicitation_handler() path already uses for clients
+            # with no elicitation capability at all -- describe the action in
+            # plain chat text and require a fresh confirmed=true re-invocation.
+            # This never lets confirmed=true bypass on a first attempt; it only
+            # substitutes the channel a human's real "yes" arrives through.
+            if params and params.get("confirmed") is True:
+                logger.info("Gate: client returned bare Declined — honoring confirmed=true for {}", description)
+                return None
+            return {
+                "status": "confirmation_required",
+                "message": (
+                    f"{description} requires user confirmation. This client did not render a visible "
+                    f"confirmation prompt. Params: {param_summary}. Confirm with the user in chat, "
+                    'then re-invoke with "confirmed": true.'
+                ),
+            }
         case CancelledElicitation():
+            # Cancellation is a distinct, explicit user action in the elicitation
+            # protocol (not the "nothing happened" default) -- treat as real.
             return {"status": "cancelled", "message": "Action cancelled by user."}
         case _:
             return {"status": "cancelled", "message": "Action cancelled (unrecognized elicitation result)."}

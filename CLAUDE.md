@@ -16,7 +16,7 @@ Docker containers managed via `netops-ui/docker-compose.yml`:
 |---|---|---|---|
 | Juniper Mist | 516 | API Token | Org: Stark Industries, org_id: 5f24e447-1145-4efa-94e0-ccec1a2a00a7, host: api.gc4.mist.com (Google Cloud 4) |
 | Aruba Central (New Central) | 655 | OAuth2 (client-credentials) | internal.api.central.arubanetworks.com — includes CNAC (Cloud NAC) + device-collections tools ported from upstream `nowireless4u/hpe-networking-mcp` |
-| Classic Central | 5 | OAuth2 (refresh-token) | internal-apigw.central.arubanetworks.com — separate legacy API/product from New Central; needed for devices not yet migrated (e.g. Bat Cave's OfficeSwitch/GarageSwitch, template-managed). Refresh token rotates on every use — see `platforms/classic_central/client.py` |
+| Classic Central | 7 | OAuth2 (refresh-token) | internal-apigw.central.arubanetworks.com — separate legacy API/product from New Central; needed for devices not yet migrated (e.g. Bat Cave's OfficeSwitch/GarageSwitch). Refresh token rotates on every use — see `platforms/classic_central/client.py`. Includes `classic_central_get_group_config`/`classic_central_get_groups` (new) backing the Classic Central → New Central migration engine (`translate_config_preview/apply`, `translate_wlan_preview/apply` with `source_platform="classic_central"`) — VLANs/WLANs/roles+policies/AP-uplink, sourced from the real `GET /configuration/v1/ap_cli/{group_name}` endpoint. Gateway-level DHCP/routes/IP-helpers explicitly out of scope for now (see memory) |
 | HPE GreenLake | 168 | OAuth2 | global.api.greenlake.hpe.com — networking-relevant slice ported from upstream `nowireless4u/hpe-networking-mcp` (device_management, subscription_management, tags, location_management, event, authorization, service_catalog, reporting); first GreenLake platform with write tools (ENABLE_GREENLAKE_WRITE_TOOLS, default false) |
 | ClearPass | 84 | OAuth2 | https://10.10.20.5/api (private IP — needs VPN when remote); reconnected after server rebuild, credentials unchanged |
 | Aruba Axis | 25 | API Token | admin-api.axissecurity.com — includes staged write tools (ENABLE_AXIS_WRITE_TOOLS, default false) |
@@ -63,6 +63,7 @@ Both volume-mounted into the hpe-mcp container at runtime.
 ## Network Inventory
 ### Aruba Central
 - Sites: Hall of Justice (44056656981), Bat Cave (791595406) — Rockwall County, TX
+- Migration Test (134350441781501952) — empty sandbox site created 2026-07-13, 0 devices, for testing the Classic Central → New Central migration engine's real applies before touching production scopes
 - OfficeSwitch: CX-6100, serial CN26KNN2Z0, site Bat Cave, IP 10.10.10.4
 - Port 1/1/7: trunk, native VLAN 20 (Aruba), tagged VLANs 10,20,30,50,60,200
 

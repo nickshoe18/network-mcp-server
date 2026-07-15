@@ -41,7 +41,7 @@ class TestClassicCentralImportable:
         assert WRITE_DELETE.destructiveHint is True
 
     def test_tool_modules_importable(self):
-        from hpe_networking_mcp.platforms.classic_central.tools import devices, variables  # noqa: F401
+        from hpe_networking_mcp.platforms.classic_central.tools import devices, group_config, variables  # noqa: F401
 
     def test_client_module_importable(self):
         from hpe_networking_mcp.platforms.classic_central.client import (

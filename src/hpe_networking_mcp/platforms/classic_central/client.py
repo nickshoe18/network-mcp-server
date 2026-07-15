@@ -122,9 +122,7 @@ class ClassicCentralClient:
         new_refresh_token = body.get("refresh_token")
         expires_in = body.get("expires_in", 7200)
         if not access_token or not new_refresh_token:
-            raise ClassicCentralAuthError(
-                f"Classic Central token response missing access_token/refresh_token: {body}"
-            )
+            raise ClassicCentralAuthError(f"Classic Central token response missing access_token/refresh_token: {body}")
 
         self._access_token = access_token
         self._refresh_token = new_refresh_token

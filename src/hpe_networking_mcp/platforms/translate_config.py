@@ -1,4 +1,4 @@
-"""Cross-platform CONFIG translation bridge tools (AOS 8 → Central).
+"""Cross-platform CONFIG translation bridge tools (AOS 8 / Classic Central → Central).
 
 Exposes the canonical translation engine for the 12 non-WLAN config kinds —
 ``vlan_id`` / ``named_vlan`` / ``net_group`` / ``role`` / ``policy`` / the AAA
@@ -34,7 +34,7 @@ from hpe_networking_mcp.translations import orchestrator
 from hpe_networking_mcp.utils.logging import logger
 
 _REDACT = "***REDACTED***"
-_SOURCES = ("aos8",)
+_SOURCES = ("aos8", "classic_central")
 _TARGETS = ("central",)
 # Keys whose values are secrets — redacted in any previewed canonical dump.
 _SECRET_KEYS = frozenset({"plaintext-value", "psk", "secret", "shared-secret"})
@@ -43,10 +43,10 @@ _SECRET_KEYS = frozenset({"plaintext-value", "psk", "secret", "shared-secret"})
 _PII_BLOCKED_KINDS = frozenset({"auth_server"})
 
 
-def _valid_kinds() -> set[str]:
-    """Config kinds with both an aos8 reader and a central writer registered."""
+def _valid_kinds(source_platform: str) -> set[str]:
+    """Config kinds with both a reader for ``source_platform`` and a central writer registered."""
     sup = orchestrator.supported()
-    readers = {r.split(":", 1)[1] for r in sup["readers"] if r.startswith("aos8:")}
+    readers = {r.split(":", 1)[1] for r in sup["readers"] if r.startswith(f"{source_platform}:")}
     writers = {w.split(":", 1)[1] for w in sup["writers"] if w.startswith("central:")}
     return (readers & writers) - {orchestrator.WLAN}
 
@@ -103,12 +103,14 @@ def _build_plan(
     extra_ctx: dict | None,
 ) -> orchestrator.TranslationPlan:
     if source_platform not in _SOURCES:
-        raise ToolError({"status_code": 400, "message": f"Unknown source_platform {source_platform!r} (expected aos8)"})
+        raise ToolError(
+            {"status_code": 400, "message": f"Unknown source_platform {source_platform!r} (expected one of {_SOURCES})"}
+        )
     if target_platform not in _TARGETS:
         raise ToolError(
             {"status_code": 400, "message": f"Unknown target_platform {target_platform!r} (expected central)"}
         )
-    valid = _valid_kinds()
+    valid = _valid_kinds(source_platform)
     if kind not in valid:
         raise ToolError({"status_code": 400, "message": f"Unknown config kind {kind!r}; available: {sorted(valid)}"})
     if not isinstance(source_record, dict) or not source_record:
@@ -248,6 +250,7 @@ async def _apply_impl(
         or source_record.get("profile-name")
         or source_record.get("dstname")
         or source_record.get("rname")
+        or (source_record.get("args") or [None])[0]  # classic_central CLI blocks
         or "?"
     )
     gate = await confirm_gated_invoke(
@@ -286,14 +289,19 @@ def register(mcp: FastMCP) -> None:
         single AOS 8 source record and returns the Central calls it would emit.
 
         Args:
-            source_platform: source — only ``'aos8'`` today.
+            source_platform: source — ``'aos8'`` or ``'classic_central'``.
             target_platform: target — only ``'central'`` today.
             kind: the config kind — one of vlan_id / named_vlan / net_group / role /
                 policy / auth_server / server_group / dot1x_auth / mac_auth /
-                captive_portal / aaa_profile / gateway_cluster.
-            source_record: the AOS 8 source record (e.g. one ``role`` / ``acl_sess`` /
-                ``netdst`` / ``aaa_prof`` record). For named_vlan, pre-merge
-                ``vlan_name`` ⨝ ``vlan_name_id`` into ``{name, vlan-ids}``.
+                captive_portal / aaa_profile / gateway_cluster (aos8 source);
+                named_vlan / policy / skeletal_role are wired for classic_central.
+            source_record: the source record. For aos8, e.g. one ``role`` /
+                ``acl_sess`` / ``netdst`` / ``aaa_prof`` record (for named_vlan,
+                pre-merge ``vlan_name`` ⨝ ``vlan_name_id`` into
+                ``{name, vlan-ids}``). For classic_central, one parsed CLI block
+                from ``classic_central_get_group_config`` (see
+                ``translations.readers.classic_central.parse_cli_blocks``) —
+                e.g. ``{"keyword": "vlan", "args": ["Users", "60"], "properties": {}}``.
             scope_id: the resolved Central scope-id to assign the object to
                 (Stage 7). ``None`` is reported in ``unresolved`` and apply blocks.
             device_functions: override the per-kind default device-functions
