@@ -63,7 +63,7 @@ Both volume-mounted into the hpe-mcp container at runtime.
 ## Network Inventory
 ### Aruba Central
 - Sites: Hall of Justice (44056656981), Bat Cave (791595406) — Rockwall County, TX
-- Migration Test (134350441781501952) — empty sandbox site created 2026-07-13, 0 devices, for testing the Classic Central → New Central migration engine's real applies before touching production scopes
+- Sandbox Testing (134452739905748992) — empty sandbox site, 0 devices, used to validate the Classic Central → New Central migration engine's real applies (all 4 Wayne Enterprises VLANs applied here 2026-07-15). Supersedes the earlier "Migration Test" site, which was deleted as unused/redundant
 - OfficeSwitch: CX-6100, serial CN26KNN2Z0, site Bat Cave, IP 10.10.10.4
 - Port 1/1/7: trunk, native VLAN 20 (Aruba), tagged VLANs 10,20,30,50,60,200
 
