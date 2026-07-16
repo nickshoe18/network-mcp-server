@@ -134,6 +134,7 @@ async def _build_plan(
     target_mode: str,
     gateway_clusters: list[str] | None,
     gateway_cluster_list: list[dict] | None = None,
+    site_name_map: dict[str, str] | None = None,
     source_override: dict | None,
     context_override: dict | None,
 ) -> orchestrator.TranslationPlan:
@@ -187,6 +188,20 @@ async def _build_plan(
     # rather than the tool guessing — explicit param wins over any context_override.
     if target_platform == "central" and gateway_cluster_list is not None:
         writer_ctx = {**(writer_ctx or {}), "gateway_cluster_list": gateway_cluster_list}
+
+    # Central and Mist have entirely separate site inventories -- there's no
+    # reason a source site NAME would ever literally match a target site name,
+    # so the automatic exact-name match in _mist_writer_ctx is a convenience,
+    # not something to rely on. site_name_map lets the caller state the real
+    # correspondence explicitly (source site name -> target Mist site id),
+    # same "operator/topology decision, not a guess" pattern as
+    # gateway_cluster_list above. Caller's mapping wins over/extends whatever
+    # the automatic exact-name match already resolved.
+    if target_platform == "mist" and site_name_map:
+        writer_ctx = {
+            **(writer_ctx or {}),
+            "site_name_to_id": {**(writer_ctx or {}).get("site_name_to_id", {}), **site_name_map},
+        }
 
     return orchestrator.plan(
         source_platform, target_platform, orchestrator.WLAN, source_obj, reader_ctx=reader_ctx, writer_ctx=writer_ctx
@@ -283,6 +298,7 @@ async def _preview_impl(
     target_mode: str,
     gateway_clusters: list[str] | None,
     gateway_cluster_list: list[dict] | None = None,
+    site_name_map: dict[str, str] | None = None,
     source_override: dict | None,
     context_override: dict | None,
 ) -> dict[str, Any]:
@@ -294,6 +310,7 @@ async def _preview_impl(
         target_mode=target_mode,
         gateway_clusters=gateway_clusters,
         gateway_cluster_list=gateway_cluster_list,
+        site_name_map=site_name_map,
         source_override=source_override,
         context_override=context_override,
     )
@@ -315,6 +332,7 @@ async def _apply_impl(
     target_mode: str,
     gateway_clusters: list[str] | None,
     gateway_cluster_list: list[dict] | None = None,
+    site_name_map: dict[str, str] | None = None,
     source_override: dict | None,
     context_override: dict | None,
     confirmed: bool,
@@ -339,6 +357,7 @@ async def _apply_impl(
         target_mode=target_mode,
         gateway_clusters=gateway_clusters,
         gateway_cluster_list=gateway_cluster_list,
+        site_name_map=site_name_map,
         source_override=source_override,
         context_override=context_override,
     )
@@ -381,6 +400,7 @@ def register(mcp: FastMCP) -> None:
         target_mode: str = "bridged",
         gateway_clusters: list[str] | None = None,
         gateway_cluster_list: list[dict] | None = None,
+        site_name_map: dict[str, str] | None = None,
         source_override: dict | None = None,
         context_override: dict | None = None,
     ) -> dict[str, Any]:
@@ -399,6 +419,11 @@ def register(mcp: FastMCP) -> None:
                 cluster-redundancy-type, tunnel-type}]``. These are topology decisions,
                 so the caller/skill supplies them; without them an overlay WLAN's
                 cluster binding is reported in ``unresolved`` and apply will block.
+            site_name_map: Mist target only — source site NAME -> target Mist site
+                ID, for when the two platforms' site inventories don't share names
+                (the normal case). Overrides/extends the automatic exact-name match;
+                without it, a source site with no identically-named Mist site is
+                reported in ``unresolved`` and apply will block.
             source_override / context_override: bypass the live fetch (tests / AOS8).
 
         Returns:
@@ -413,6 +438,7 @@ def register(mcp: FastMCP) -> None:
             target_mode=target_mode,
             gateway_clusters=gateway_clusters,
             gateway_cluster_list=gateway_cluster_list,
+            site_name_map=site_name_map,
             source_override=source_override,
             context_override=context_override,
         )
@@ -426,6 +452,7 @@ def register(mcp: FastMCP) -> None:
         target_mode: str = "bridged",
         gateway_clusters: list[str] | None = None,
         gateway_cluster_list: list[dict] | None = None,
+        site_name_map: dict[str, str] | None = None,
         source_override: dict | None = None,
         context_override: dict | None = None,
         confirmed: bool = False,
@@ -449,6 +476,7 @@ def register(mcp: FastMCP) -> None:
             target_mode=target_mode,
             gateway_clusters=gateway_clusters,
             gateway_cluster_list=gateway_cluster_list,
+            site_name_map=site_name_map,
             source_override=source_override,
             context_override=context_override,
             confirmed=confirmed,

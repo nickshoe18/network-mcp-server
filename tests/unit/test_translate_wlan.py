@@ -150,6 +150,58 @@ async def test_build_plan_rejects_aos8_without_override() -> None:
     assert e.value.args[0]["status_code"] == 400
 
 
+_CENTRAL_WLAN_WITH_SITE = {"ssid": "CORP"}
+_CENTRAL_ASSIGN_SITE = [
+    {"profile-type": "wlan-ssids", "profile-instance": "CORP", "scope-type": "SITE", "scope-name": "Hall of Justice"}
+]
+
+
+async def _central_to_mist_plan(site_name_map=None, extra_writer_ctx=None):
+    return await tw._build_plan(
+        _ctx(),
+        "central",
+        "mist",
+        "CORP",
+        target_mode="bridged",
+        gateway_clusters=None,
+        site_name_map=site_name_map,
+        source_override=_CENTRAL_WLAN_WITH_SITE,
+        context_override={
+            "reader_ctx": {"assignments": _CENTRAL_ASSIGN_SITE},
+            "writer_ctx": {"org_id": "org1", **(extra_writer_ctx or {})},
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_mist_target_without_site_name_map_reports_unresolved_site() -> None:
+    # Central and Mist site inventories don't share names by default -- no
+    # site_name_map means the source site can't be resolved.
+    plan = await _central_to_mist_plan()
+    assert {"kind": "site", "name": "Hall of Justice"} in plan.unresolved
+
+
+@pytest.mark.asyncio
+async def test_mist_target_site_name_map_resolves_site() -> None:
+    plan = await _central_to_mist_plan(site_name_map={"Hall of Justice": "stark-tower-id"})
+    assert {"kind": "site", "name": "Hall of Justice"} not in plan.unresolved
+    template_call = plan.calls[0]
+    assert template_call["body"]["applies"]["site_ids"] == ["stark-tower-id"]
+
+
+@pytest.mark.asyncio
+async def test_mist_target_site_name_map_extends_rather_than_replaces() -> None:
+    # A caller-supplied site_name_map merges onto (not over) whatever the
+    # automatic exact-name match already resolved for OTHER sites.
+    plan = await _central_to_mist_plan(
+        site_name_map={"Hall of Justice": "stark-tower-id"},
+        extra_writer_ctx={"site_name_to_id": {"Other Site": "other-id"}},
+    )
+    template_call = plan.calls[0]
+    assert template_call["body"]["applies"]["site_ids"] == ["stark-tower-id"]
+    assert not plan.unresolved
+
+
 @pytest.mark.asyncio
 async def test_build_plan_rejects_unknown_platforms() -> None:
     for src, tgt in [("nope", "central"), ("mist", "nope")]:
