@@ -165,10 +165,34 @@ def _security(wlan: dict, server_groups: dict, auth_servers: dict, alias_names: 
     return sec
 
 
-def _vlan(wlan: dict) -> Vlan:
+def _resolve_named_vlan_id(name: str, named_vlans: dict[str, dict] | None) -> int | None:
+    """Resolve a named-vlan's real numeric VLAN id from the Library object.
+
+    Direct case: the named-vlan embeds ``vlan-id-ranges`` itself (no alias
+    indirection) — reliable regardless of scope, and the common case (e.g.
+    Hall of Justice's "Users" named-vlan). NOT resolved here: the
+    alias-indirection case (``vlan-alias``) — the Library ALIAS_VLAN object
+    only carries a placeholder value; the real id is a per-scope LOCAL
+    override, so there is no single scope-independent answer. Callers get
+    ``None`` and the writer falls back to name-based mapping.
+    """
+    obj = (named_vlans or {}).get(name)
+    if not isinstance(obj, dict):
+        return None
+    ranges = (obj.get("vlan") or {}).get("vlan-id-ranges") or []
+    if ranges:
+        try:
+            return int(str(ranges[0]))
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def _vlan(wlan: dict, named_vlans: dict[str, dict] | None = None) -> Vlan:
     sel = wlan.get("vlan-selector")
     if sel == "NAMED_VLAN" and wlan.get("vlan-name"):
-        return Vlan(mode=VlanMode.NAMED, name=wlan["vlan-name"])
+        name = wlan["vlan-name"]
+        return Vlan(mode=VlanMode.NAMED, name=name, id=_resolve_named_vlan_id(name, named_vlans))
     if sel == "VLAN_RANGES":
         rng = wlan.get("vlan-id-range") or []
         if rng:
@@ -212,6 +236,7 @@ def central_read_wlan(
     auth_servers: list[dict] | None = None,
     aliases: list[dict] | None = None,
     assignments: list[dict] | None = None,
+    named_vlans: list[dict] | None = None,
 ) -> CanonicalWlan:
     """Build a ``CanonicalWlan`` from a Central ``wlan-ssids`` profile + context.
 
@@ -221,10 +246,13 @@ def central_read_wlan(
         auth_servers: Central ``auth-servers`` records (host/secret/ports).
         aliases: Central ``aliases`` records (to detect ``{{var}}`` hosts).
         assignments: this profile's ``config-assignments`` rows (scope-name/-type).
+        named_vlans: Central ``named-vlan`` library records, to resolve a
+            NAMED_VLAN reference to its real numeric id (``central_get_named_vlans``).
     """
     sg_by = _index(server_groups, "name")
     as_by = _index(auth_servers, "name")
     alias_names = _alias_names(aliases)
+    nv_by = _index(named_vlans, "name")
 
     essid_obj = wlan.get("essid") or {}
     ssid = essid_obj.get("alias") if essid_obj.get("use-alias") else essid_obj.get("name")
@@ -246,7 +274,7 @@ def central_read_wlan(
         enabled=bool(wlan.get("enable", True)),
         hidden=bool(wlan.get("hide-ssid", False)),
         security=_security(wlan, sg_by, as_by, alias_names),
-        vlan=_vlan(wlan),
+        vlan=_vlan(wlan, nv_by),
         rates=_rates(wlan),
         performance=p,
         isolation=Isolation(

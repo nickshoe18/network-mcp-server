@@ -87,7 +87,14 @@ def _radius(canon: CanonicalWlan, body: dict[str, Any]) -> None:
 
 def _vlan(canon: CanonicalWlan, body: dict[str, Any]) -> None:
     v = canon.vlan
-    if v.mode == VlanMode.ID and v.id is not None:
+    # A resolved numeric id always wins, regardless of mode -- Mist's plain
+    # vlan_id is preferred over dynamic_vlan-by-name whenever the real id is
+    # known (e.g. a Central NAMED_VLAN whose Library object embeds the id
+    # directly). dynamic_vlan-by-name is the fallback only when no id could
+    # be resolved (e.g. Central's alias-indirection case, which is
+    # scope-dependent and has no single answer — see readers/central.py's
+    # _resolve_named_vlan_id).
+    if v.id is not None:
         body["vlan_enabled"] = True
         body["vlan_id"] = v.id
     elif v.mode in (VlanMode.NAMED, VlanMode.DYNAMIC) and v.name:

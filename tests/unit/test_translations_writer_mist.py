@@ -130,6 +130,16 @@ def test_vlan_id_and_named() -> None:
     assert bn["dynamic_vlan"]["vlans"] == {"CORP": ""}
 
 
+def test_named_vlan_with_resolved_id_prefers_vlan_id_over_dynamic_vlan() -> None:
+    # A Central NAMED_VLAN whose real numeric id was resolved (direct
+    # vlan-id-ranges, not alias-indirection) must map to plain vlan_id, not
+    # Mist's dynamic_vlan-by-name mechanism.
+    body = _calls(Security(key_mgmt=KeyMgmt.OPEN), vlan=Vlan(mode=VlanMode.NAMED, name="Users", id=60))[1]["body"]
+    assert body["vlan_enabled"] is True
+    assert body["vlan_id"] == 60
+    assert "dynamic_vlan" not in body
+
+
 @pytest.mark.parametrize("km", [KeyMgmt.WEP_STATIC, KeyMgmt.WEP_DYNAMIC])
 def test_wep_is_flagged_unsupported(km) -> None:
     # WEP has no Mist mapping → the WLAN call is flagged unresolved so the plan

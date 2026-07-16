@@ -97,6 +97,7 @@ async def _fetch_central_source(ctx: Context, ssid: str) -> tuple[dict, dict]:
         "auth_servers": await _list("auth-servers", "auth-server"),
         "aliases": await _list("aliases", "alias"),
         "assignments": await _list("config-assignments", "config-assignment"),
+        "named_vlans": await _list("named-vlan", "profile"),
     }
     return w, reader_ctx
 

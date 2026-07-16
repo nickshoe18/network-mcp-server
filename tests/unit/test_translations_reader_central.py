@@ -69,6 +69,32 @@ def test_forward_and_vlan_inverse() -> None:
     named = central_read_wlan(_wlan(**{"vlan-selector": "NAMED_VLAN", "vlan-name": "CORP"}))
     assert named.vlan.mode == VlanMode.NAMED
     assert named.vlan.name == "CORP"
+    assert named.vlan.id is None  # no named_vlans context supplied -- unresolved, not guessed
+
+
+def test_named_vlan_resolves_real_id_from_direct_ranges() -> None:
+    # The common case: the named-vlan Library object embeds vlan-id-ranges
+    # directly (no alias indirection) -- e.g. Hall of Justice's real "Users"
+    # named-vlan. Reliable regardless of target scope.
+    named_vlans = [{"name": "Users", "vlan": {"vlan-id-ranges": ["60"]}}]
+    c = central_read_wlan(
+        _wlan(**{"vlan-selector": "NAMED_VLAN", "vlan-name": "Users"}), named_vlans=named_vlans
+    )
+    assert c.vlan.mode == VlanMode.NAMED
+    assert c.vlan.name == "Users"
+    assert c.vlan.id == 60
+
+
+def test_named_vlan_alias_indirection_leaves_id_unresolved() -> None:
+    # Alias-indirection (vlan-alias) is scope-dependent -- the Library
+    # ALIAS_VLAN object only carries a placeholder, so there's no single
+    # correct id to guess. Must stay None, not silently pick the placeholder.
+    named_vlans = [{"name": "Aruba", "vlan": {"vlan-alias": "aruba"}}]
+    c = central_read_wlan(
+        _wlan(**{"vlan-selector": "NAMED_VLAN", "vlan-name": "Aruba"}), named_vlans=named_vlans
+    )
+    assert c.vlan.mode == VlanMode.NAMED
+    assert c.vlan.id is None
 
 
 def test_mpsk_cloud_detected() -> None:
