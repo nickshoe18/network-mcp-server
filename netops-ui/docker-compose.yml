@@ -2,7 +2,7 @@ services:
 
   hpe-mcp:
     build:
-      context: ..
+      context: /Users/nickshoemaker/hpe-networking-mcp-v2
       dockerfile: Dockerfile
     entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
     container_name: hpe-mcp
@@ -17,7 +17,9 @@ services:
       # across restarts instead of going stale after one boot.
       - ${SECRETS_DIR:-./hpe-secrets}/classic_central_refresh_token:/run/secrets-rw/classic_central_refresh_token
     ports:
-      - "8000:8000"
+      # Loopback-only: this server has no auth of its own, so binding to
+      # 0.0.0.0 would let anyone on the LAN drive it with these credentials.
+      - "127.0.0.1:8000:8000"
     environment:
       - ENABLE_CENTRAL_WRITE_TOOLS=${ENABLE_CENTRAL_WRITE_TOOLS:-false}
       - ENABLE_MIST_WRITE_TOOLS=${ENABLE_MIST_WRITE_TOOLS:-false}
@@ -35,26 +37,152 @@ services:
       retries: 5
       start_period: 90s
 
-  # Second, fully isolated Central tenant (New Central, OAuth2
-  # client-credentials -- no refresh-token rotation to manage) -- separate
-  # secrets mount, separate port, own write-tool gate. Deliberately generic
-  # naming here (this file is committed to a public repo); the actual
-  # tenant identity lives only in local, gitignored files (.env, .mcp.json,
-  # the secrets folder itself).
-  hpe-mcp-classic2:
+  # Dedicated, isolated instance used ONLY by the Jarvis autopilot's Stage 2
+  # remediation calls (netops-backend/src/remediation.js) -- never by interactive
+  # chat/subagent sessions, which keep using the main hpe-mcp above unchanged.
+  # DISABLE_ELICITATION=true is what makes headless, unattended write calls
+  # possible at all (a bare HTTP client can't answer an interactive confirmation
+  # prompt -- see project memory on why confirm_gated_invoke's normal fallback
+  # doesn't work for a truly headless client). That is a container-wide bypass
+  # of the confirmation gate, so the narrow scoping has to live here, at the
+  # infrastructure level, not just in application code:
+  #   - ONLY Mist write tools are enabled -- every other platform is hardcoded
+  #     false below, deliberately NOT referencing the shared ENABLE_*_WRITE_TOOLS
+  #     vars from .env (those default several platforms to true for the main
+  #     hpe-mcp above; inheriting that here would silently confirmation-bypass
+  #     Central/ClearPass/AOS8 writes too).
+  #   - No customer tenant secrets or credentials anywhere in this service.
+  #   - Same secrets/ as the lab hpe-mcp (Mist-only credentials actually get
+  #     used; the mount is read-only regardless).
+  # The actual "only 4 specific single-entity tool calls, only after a read-only
+  # investigation names the target, every use logged" narrowing is enforced in
+  # remediation.js, not here -- this container being reachable would still let
+  # anyone who can reach 127.0.0.1:8005 call any enabled Mist write tool
+  # unconfirmed, so nothing else should ever be pointed at this port.
+  hpe-mcp-autopilot:
     build:
-      context: ..
+      context: /Users/nickshoemaker/hpe-networking-mcp-v2
       dockerfile: Dockerfile
     entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
-    container_name: hpe-mcp-classic2
+    container_name: hpe-mcp-autopilot
     volumes:
-      - ${CLASSIC2_SECRETS_DIR:-./hpe-secrets-classic2}:/run/secrets:ro
+      - ${SECRETS_DIR:-./hpe-secrets}:/run/secrets:ro
       - ${SECRETS_DIR:-./hpe-secrets}/../zscaler-full-chain.pem:/tmp/zscaler-chain.pem:ro
       - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8005:8000"
     environment:
-      - ENABLE_CENTRAL_WRITE_TOOLS=${ENABLE_CENTRAL_WRITE_TOOLS_CLASSIC2:-false}
+      - ENABLE_MIST_WRITE_TOOLS=true
+      - DISABLE_ELICITATION=true
+      - ENABLE_CENTRAL_WRITE_TOOLS=false
+      - ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS=false
+      - ENABLE_CLEARPASS_WRITE_TOOLS=false
+      - ENABLE_GREENLAKE_WRITE_TOOLS=false
+      - ENABLE_AOS8_WRITE_TOOLS=false
+      - MCP_TOOL_MODE=${MCP_TOOL_MODE:-code}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+  # Customer tenant "Bobcats" (New Central, OAuth2 client-credentials -- no
+  # refresh-token rotation to manage) -- separate secrets mount, separate
+  # port, own write-tool gate. Deliberately a codename here (this file is
+  # committed to a public repo); the real customer identity lives only in
+  # local, gitignored files (.env, .mcp.json, the secrets folder itself).
+  hpe-mcp-bobcats:
+    build:
+      context: /Users/nickshoemaker/hpe-networking-mcp-v2
+      dockerfile: Dockerfile
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+    container_name: hpe-mcp-bobcats
+    volumes:
+      - ${BOBCATS_SECRETS_DIR:-./hpe-secrets-bobcats}:/run/secrets:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../zscaler-full-chain.pem:/tmp/zscaler-chain.pem:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      - ENABLE_CENTRAL_WRITE_TOOLS=${ENABLE_CENTRAL_WRITE_TOOLS_BOBCATS:-false}
+      - MCP_TOOL_MODE=${MCP_TOOL_MODE:-code}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+  # Customer tenant "Jackets" (New Central, OAuth2 client-credentials).
+  hpe-mcp-jackets:
+    build:
+      context: /Users/nickshoemaker/hpe-networking-mcp-v2
+      dockerfile: Dockerfile
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+    container_name: hpe-mcp-jackets
+    volumes:
+      - ${JACKETS_SECRETS_DIR:-./hpe-secrets-jackets}:/run/secrets:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../zscaler-full-chain.pem:/tmp/zscaler-chain.pem:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+    ports:
+      - "127.0.0.1:8002:8000"
+    environment:
+      - ENABLE_CENTRAL_WRITE_TOOLS=${ENABLE_CENTRAL_WRITE_TOOLS_JACKETS:-false}
+      - MCP_TOOL_MODE=${MCP_TOOL_MODE:-code}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+  # Customer tenant "Leopards" (New Central, OAuth2 client-credentials).
+  hpe-mcp-leopards:
+    build:
+      context: /Users/nickshoemaker/hpe-networking-mcp-v2
+      dockerfile: Dockerfile
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+    container_name: hpe-mcp-leopards
+    volumes:
+      - ${LEOPARDS_SECRETS_DIR:-./hpe-secrets-leopards}:/run/secrets:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../zscaler-full-chain.pem:/tmp/zscaler-chain.pem:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+    ports:
+      - "127.0.0.1:8003:8000"
+    environment:
+      - ENABLE_CENTRAL_WRITE_TOOLS=${ENABLE_CENTRAL_WRITE_TOOLS_LEOPARDS:-false}
+      - MCP_TOOL_MODE=${MCP_TOOL_MODE:-code}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+  # Customer tenant "Panthers" (Classic Central, OAuth2 refresh-token grant --
+  # rotates on every use, same as the lab's own Classic Central connection
+  # above; own read-write bind + write path for the rotated token).
+  hpe-mcp-panthers:
+    build:
+      context: /Users/nickshoemaker/hpe-networking-mcp-v2
+      dockerfile: Dockerfile
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+    container_name: hpe-mcp-panthers
+    volumes:
+      - ${PANTHERS_SECRETS_DIR:-./hpe-secrets-panthers}:/run/secrets:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../zscaler-full-chain.pem:/tmp/zscaler-chain.pem:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ${PANTHERS_SECRETS_DIR:-./hpe-secrets-panthers}/classic_central_refresh_token:/run/secrets-rw/classic_central_refresh_token
+    ports:
+      - "127.0.0.1:8004:8000"
+    environment:
+      - CLASSIC_CENTRAL_REFRESH_TOKEN_WRITE_PATH=/run/secrets-rw/classic_central_refresh_token
+      - ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS=${ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS_PANTHERS:-false}
       - MCP_TOOL_MODE=${MCP_TOOL_MODE:-code}
     restart: unless-stopped
     healthcheck:
@@ -70,15 +198,51 @@ services:
       dockerfile: Dockerfile
     container_name: netops-backend
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - MCP_SERVER_URL=http://hpe-mcp:8000/mcp
       - FRONTEND_URL=http://localhost:3000
       - PORT=3001
       - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/zscaler.crt
+      - RUNBOOK_DIR=/app/runbooks
+      - JARVIS_MODEL=${JARVIS_MODEL:-claude-sonnet-5}
+      - TAILSCALE_ALLOWED_LOGINS=${TAILSCALE_ALLOWED_LOGINS:-}
+      # Stage 1 autopilot: polls Marvis Actions (official Juniper MCP) for the lab org and
+      # runs a read-only Jarvis investigation on anything new. See backend/src/poller.js.
+      - JARVIS_AUTOPILOT_ENABLED=${JARVIS_AUTOPILOT_ENABLED:-true}
+      - JARVIS_POLL_INTERVAL_MS=${JARVIS_POLL_INTERVAL_MS:-120000}
+      - JARVIS_DATA_DIR=/app/data
+      - MIST_ORG_ID=${MIST_ORG_ID:-5f24e447-1145-4efa-94e0-ccec1a2a00a7}
+      - MIST_SITE_ID=${MIST_SITE_ID:-59f74351-5c94-49bf-adea-dc96f4b132bf}
+      - MARVIS_MCP_URL=https://mcp.ai.juniper.net/mcp/mist
+      - MARVIS_HEADER_FILE=/run/secrets/juniper_mist_headers.txt
+      # External alerting for autopilot findings — each channel is a no-op until its
+      # secret file has real content in it (see secrets/teams_webhook_url.txt,
+      # secrets/resend_api_key.txt). NOTIFY_SEVERITY_FLOOR: only Marvis findings at or
+      # above this severity page externally (SLE findings always do — see notifier.js).
+      - TEAMS_WEBHOOK_FILE=/run/secrets/teams_webhook_url.txt
+      - RESEND_API_KEY_FILE=/run/secrets/resend_api_key.txt
+      - NOTIFY_EMAIL_FROM=${NOTIFY_EMAIL_FROM:-}
+      - NOTIFY_EMAIL_TO=${NOTIFY_EMAIL_TO:-}
+      - NOTIFY_SEVERITY_FLOOR=${NOTIFY_SEVERITY_FLOOR:-50}
+      # Stage 2: proposes (never auto-executes) one of 3 narrow actions on a new finding;
+      # a human must click Approve in the UI (POST /api/findings/:id/approve) before
+      # anything runs. Execution itself goes to the ISOLATED hpe-mcp-autopilot instance,
+      # never the main hpe-mcp above. Master off-switch defaults to false on purpose —
+      # this whole capability has to be turned on deliberately, per session.
+      - MCP_AUTOPILOT_SERVER_URL=http://hpe-mcp-autopilot:8000/mcp
+      - JARVIS_REMEDIATION_ENABLED=${JARVIS_REMEDIATION_ENABLED:-false}
+    volumes:
+      - ../.claude/runbooks:/app/runbooks:ro
+      - ./backend/data:/app/data
+      - ${SECRETS_DIR:-./hpe-secrets}/juniper_mist_headers.txt:/run/secrets/juniper_mist_headers.txt:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/teams_webhook_url.txt:/run/secrets/teams_webhook_url.txt:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/resend_api_key.txt:/run/secrets/resend_api_key.txt:ro
     depends_on:
       hpe-mcp:
+        condition: service_healthy
+      hpe-mcp-autopilot:
         condition: service_healthy
     restart: unless-stopped
 
@@ -88,7 +252,8 @@ services:
       dockerfile: Dockerfile
     container_name: netops-frontend
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
+      - "127.0.0.1:3100:81"
     depends_on:
       - backend
     restart: unless-stopped

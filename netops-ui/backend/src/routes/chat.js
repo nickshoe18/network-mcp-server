@@ -1,12 +1,16 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { JARVIS_SYSTEM, JARVIS_TOOLS, JARVIS_MODEL, readRunbook, checkReadOnly } from "../jarvis.js";
 
 export const chatRouter = Router();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MCP_URL = process.env.MCP_SERVER_URL || "http://hpe-mcp:8000/mcp";
+const MAX_TURNS = 25;
 
 // ── MCP session management ────────────────────────────────────────────────────
-async function initSession() {
+// Exported so jarvisAgent.js (the autopilot poller's investigation runner) can
+// reuse the exact same session/call plumbing instead of a second implementation.
+export async function initSession() {
   const resp = await fetch(MCP_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Accept": "application/json, text/event-stream" },
@@ -18,7 +22,7 @@ async function initSession() {
   return sessionId;
 }
 
-async function mcpCall(sessionId, method, params = {}) {
+export async function mcpCall(sessionId, method, params = {}) {
   const headers = { "Content-Type": "application/json", "Accept": "application/json, text/event-stream" };
   if (sessionId) headers["mcp-session-id"] = sessionId;
   const resp = await fetch(MCP_URL, {
@@ -69,30 +73,7 @@ KEY PATTERNS:
   }
 ];
 
-// ── POST /api/chat ─────────────────────────────────────────────────────────────
-chatRouter.post("/", async (req, res) => {
-  const messages = req.body && req.body.messages;
-  if (!messages || !Array.isArray(messages))
-    return res.status(400).json({ error: "messages array required" });
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
-  const send = (event, data) =>
-    res.write("event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n");
-
-  try {
-    const sessionId = await initSession();
-
-    let currentMessages = [...messages];
-
-    while (true) {
-      const response = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 4096,
-        system: `You are a network operations assistant with FULL ACCESS to all six HPE networking platforms:
+const ASSISTANT_SYSTEM = `You are a network operations assistant with FULL ACCESS to all six HPE networking platforms:
 1. Juniper Mist — wireless, APs, clients, SLE, alarms
 2. Aruba Central — switches, APs, gateways, sites, alerts, config
 3. HPE GreenLake — subscriptions, workspace, device inventory, users
@@ -120,9 +101,41 @@ SWITCH PORT QUERIES (NEVER use show interface 1/1/X - blocked by Central):
 3. central_get_switch_poe(serial_number=SERIAL) — filter for port
 4. central_show_commands(serial_number=SERIAL, device_type='cx', commands='show running-config') — parse interface section
 
-Always format responses as markdown tables. Be concise and direct.`,
+Always format responses as markdown tables. Be concise and direct.`;
+
+// ── POST /api/chat ─────────────────────────────────────────────────────────────
+chatRouter.post("/", async (req, res) => {
+  const messages = req.body && req.body.messages;
+  if (!messages || !Array.isArray(messages))
+    return res.status(400).json({ error: "messages array required" });
+
+  const jarvis = req.body.mode === "jarvis" || req.remote === true;
+  const model = jarvis ? JARVIS_MODEL : "claude-sonnet-4-5";
+  const system = jarvis ? JARVIS_SYSTEM : ASSISTANT_SYSTEM;
+  const tools = jarvis ? JARVIS_TOOLS : TOOLS;
+  const maxTokens = jarvis ? 8192 : 4096;
+
+  res.setHeader("X-Netops-Mode", jarvis ? "jarvis" : "assistant");
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const send = (event, data) =>
+    res.write("event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n");
+
+  try {
+    const sessionId = await initSession();
+
+    let currentMessages = [...messages];
+
+    for (let turn = 0; turn < MAX_TURNS; turn++) {
+      const response = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system,
         messages: currentMessages,
-        tools: TOOLS,
+        tools,
       });
 
       for (const block of response.content) {
@@ -135,16 +148,32 @@ Always format responses as markdown tables. Be concise and direct.`,
       const toolResults = [];
 
       for (const toolUse of toolUseBlocks) {
-        send("tool_start", { name: toolUse.input.description || toolUse.name });
-        console.log("Executing:", toolUse.input.description || "query");
+        const label = toolUse.input.description || (toolUse.name === "read_runbook" ? "runbook: " + (toolUse.input.name || "list") : toolUse.name);
+        send("tool_start", { name: label });
+        console.log("Executing:", label);
 
         try {
-          const result = await mcpCall(sessionId, "tools/call", {
-            name: "execute",
-            arguments: { code: toolUse.input.code }
-          });
-
-          const resultText = result?.content?.[0]?.text || JSON.stringify(result);
+          let resultText;
+          if (jarvis && toolUse.name === "read_runbook") {
+            resultText = readRunbook(toolUse.input.name);
+          } else {
+            const blocked = jarvis ? checkReadOnly(toolUse.input.code || "") : null;
+            if (blocked) {
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: toolUse.id,
+                content: [{ type: "text", text: blocked }],
+                is_error: true,
+              });
+              send("tool_end", { name: label });
+              continue;
+            }
+            const result = await mcpCall(sessionId, "tools/call", {
+              name: "execute",
+              arguments: { code: toolUse.input.code }
+            });
+            resultText = result?.content?.[0]?.text || JSON.stringify(result);
+          }
           toolResults.push({
             type: "tool_result",
             tool_use_id: toolUse.id,
@@ -158,7 +187,7 @@ Always format responses as markdown tables. Be concise and direct.`,
             is_error: true,
           });
         }
-        send("tool_end", { name: toolUse.name });
+        send("tool_end", { name: label });
       }
 
       currentMessages = [

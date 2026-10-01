@@ -1,4 +1,5 @@
 import React from "react";
+import { FindingsPanel } from "./FindingsPanel.jsx";
 
 const QUICK_ACTIONS = [
   { label: "Network health overview",  prompt: "Run a full network health overview across all platforms" },
@@ -22,19 +23,25 @@ export function Sidebar({ platforms, loading, onAction }) {
         </div>
       </div>
 
-      <div style={{ padding: "12px 12px 0" }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: "#555", letterSpacing: ".08em", marginBottom: 8, textTransform: "uppercase" }}>Platforms</div>
-        {loading ? <div style={{ fontSize: 12, color: "#555", padding: "8px 0" }}>Connecting…</div> : platforms.map(p => (
-          <div key={p.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", borderRadius: 6, marginBottom: 2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[p.status] ?? "#888", flexShrink: 0, boxShadow: p.status === "ok" ? `0 0 6px ${STATUS_COLOR.ok}80` : "none" }} />
-              <span style={{ fontSize: 12, color: p.status === "ok" ? "#c8cad4" : "#666" }}>{p.label}</span>
+      <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <div style={{ padding: "12px 12px 0" }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: "#555", letterSpacing: ".08em", marginBottom: 8, textTransform: "uppercase" }}>Platforms</div>
+          {loading ? <div style={{ fontSize: 12, color: "#555", padding: "8px 0" }}>Connecting…</div> : platforms.map(p => (
+            <div key={p.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", borderRadius: 6, marginBottom: 2 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[p.status] ?? "#888", flexShrink: 0, boxShadow: p.status === "ok" ? `0 0 6px ${STATUS_COLOR.ok}80` : "none" }} />
+                <span style={{ fontSize: 12, color: p.status === "ok" ? "#c8cad4" : "#666" }}>{p.label}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+
+        <div style={{ borderTop: "1px solid #2a2d3a", marginTop: 12 }}>
+          <FindingsPanel />
+        </div>
       </div>
 
-      <div style={{ padding: "12px", borderTop: "1px solid #2a2d3a", marginTop: "auto" }}>
+      <div style={{ padding: "12px", borderTop: "1px solid #2a2d3a", flexShrink: 0 }}>
         <div style={{ fontSize: 10, fontWeight: 600, color: "#555", letterSpacing: ".08em", marginBottom: 8, textTransform: "uppercase" }}>Quick actions</div>
         {QUICK_ACTIONS.map(({ label, prompt }) => (
           <button key={label} onClick={() => onAction(prompt)}

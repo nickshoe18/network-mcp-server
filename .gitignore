@@ -4,9 +4,18 @@ secrets-*/
 .env
 *.env
 
+# Real customer data pulls (client lists, reports, etc.) — never commit
+reports-*/
+
+# NetOps backend runtime state (Jarvis autopilot findings/dedup state) — generated, not source
+netops-ui/backend/data/
+
 # Python
 __pycache__/
 *.pyc
+
+# Node
+node_modules/
 
 # macOS
 .DS_Store
