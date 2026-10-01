@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar.jsx";
 import { ChatPanel } from "./components/ChatPanel.jsx";
 import { StatusBar } from "./components/StatusBar.jsx";
@@ -6,8 +6,22 @@ import { useChat } from "./hooks/useChat.js";
 import { usePlatformHealth } from "./hooks/usePlatformHealth.js";
 
 export default function App() {
-  const { messages, streaming, activeTools, send } = useChat();
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem("netops-mode") === "jarvis" ? "jarvis" : "assistant"; } catch { return "assistant"; }
+  });
+  const [remote, setRemote] = useState(false);
+  useEffect(() => {
+    fetch("/api/whoami").then(r => r.json()).then(d => setRemote(!!d.remote)).catch(() => {});
+  }, []);
+  const effectiveMode = remote ? "jarvis" : mode;
+  const { messages, streaming, activeTools, send, clear } = useChat(effectiveMode);
   const { platforms, loading } = usePlatformHealth(30000);
+  const changeMode = (m) => {
+    if (remote || m === mode || streaming) return;
+    try { localStorage.setItem("netops-mode", m); } catch {}
+    clear();
+    setMode(m);
+  };
 
   return (
     <>
@@ -35,7 +49,7 @@ export default function App() {
         <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
           <Sidebar platforms={platforms} loading={loading} onAction={send} />
           <main style={{ flex: 1, display: "flex", flexDirection: "column", background: "#12141c", overflow: "hidden" }}>
-            <ChatPanel messages={messages} streaming={streaming} activeTools={activeTools} onSend={send} />
+            <ChatPanel messages={messages} streaming={streaming} activeTools={activeTools} onSend={send} mode={effectiveMode} onModeChange={changeMode} remote={remote} />
           </main>
         </div>
       </div>

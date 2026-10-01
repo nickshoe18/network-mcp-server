@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 
-export function useChat() {
+export function useChat(mode = "assistant") {
   const [messages, setMessages]       = useState([]);
   const [streaming, setStreaming]     = useState(false);
   const [activeTools, setActiveTools] = useState([]);
@@ -22,7 +22,7 @@ export function useChat() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, mode }),
         signal: abortRef.current.signal,
       });
 
@@ -62,7 +62,7 @@ export function useChat() {
       setActiveTools([]);
       setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, streaming: false } : m));
     }
-  }, [messages, streaming]);
+  }, [messages, streaming, mode]);
 
   const stop  = () => abortRef.current?.abort();
   const clear = () => { setMessages([]); setStreaming(false); };
