@@ -21,11 +21,31 @@ function shouldNotify(record) {
   return sev === null || sev === undefined || sev >= SEVERITY_FLOOR;
 }
 
+function actionSummary(record) {
+  const action = record.proposedAction;
+  if (action) {
+    const lines = [
+      `Action: ${action.name} (${action.status}; ${action.executionMode || "no execution"})`,
+      action.reason ? `Action rationale: ${action.reason}` : "",
+      Number.isFinite(action.confidence) ? `Action confidence: ${(action.confidence * 100).toFixed(0)}%` : "",
+      record.actionDecision?.reason && record.actionDecision.reason !== action.reason
+        ? `Action decision: ${record.actionDecision.reason}` : "",
+      action.verification?.summary ? `Post-action verification (${action.verification.status}): ${action.verification.summary}` : "",
+    ];
+    return lines.filter(Boolean).join("\n");
+  }
+  const decision = record.actionDecision;
+  return decision?.status && decision.status !== "not_evaluated"
+    ? `Action decision: ${decision.status}${decision.reason ? ` — ${decision.reason}` : ""}`
+    : "";
+}
+
 async function notifyTeams(record) {
   const webhookUrl = readSecretFile(TEAMS_WEBHOOK_FILE);
   if (!webhookUrl) return;
 
   const t = record.trigger || {};
+  const action = actionSummary(record);
   const color = (t.severity ?? 100) >= 75 ? "C4314B" : "E8A33D"; // red for high severity, amber otherwise
   const body = {
     "@type": "MessageCard",
@@ -40,8 +60,9 @@ async function notifyTeams(record) {
         { name: "Symptom", value: t.symptom || "" },
         { name: "Source", value: t.source || "" },
         { name: "Severity", value: t.severity != null ? String(t.severity) : "n/a" },
+        ...(action ? [{ name: "Action", value: action.split("\n")[0] }] : []),
       ],
-      text: (record.finding || "").slice(0, 3000),
+      text: `${(record.finding || "").slice(0, 3000)}${action ? `\n\n${action}` : ""}`,
     }],
   };
 
@@ -59,8 +80,9 @@ async function notifyEmail(record) {
   if (!apiKey || !EMAIL_FROM || EMAIL_TO.length === 0) return;
 
   const t = record.trigger || {};
+  const action = actionSummary(record);
   const subject = `Jarvis autopilot: ${t.symptom || "new finding"} (${t.entity || "lab network"})`;
-  const text = `Category: ${t.category}\nEntity: ${t.entity}\nSeverity: ${t.severity ?? "n/a"}\nSource: ${t.source}\n\n${record.finding}`;
+  const text = `Category: ${t.category}\nEntity: ${t.entity}\nSeverity: ${t.severity ?? "n/a"}\nSource: ${t.source}\n\n${record.finding}${action ? `\n\n${action}` : ""}`;
 
   try {
     const resp = await fetch("https://api.resend.com/emails", {

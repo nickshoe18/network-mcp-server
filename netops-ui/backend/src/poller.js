@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { getActiveMarvisActions, getSleBreaches, marvisConfigured } from "./marvisClient.js";
 import { getSiteAlerts, severityScore } from "./centralClient.js";
-import { runJarvisInvestigation, proposeRemediation } from "./jarvisAgent.js";
+import { runJarvisInvestigation, proposeRemediation, verifyRemediation } from "./jarvisAgent.js";
+import { executeRemediation, remediationEnabled } from "./remediation.js";
+import { evaluateRemediation } from "./remediationPolicy.js";
+import { executeAndVerify, hasPreviousActionAttempt, preserveLatestActionState } from "./remediationLifecycle.js";
 import { notify } from "./notifier.js";
 
 const DATA_DIR = process.env.JARVIS_DATA_DIR || "/app/data";
@@ -54,7 +57,13 @@ function loadJson(file, fallback) {
 }
 
 function saveJson(file, value) {
-  try { fs.writeFileSync(file, JSON.stringify(value)); } catch (e) { console.error(`[poller] failed to write ${file}:`, e.message); }
+  try {
+    fs.writeFileSync(file, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    console.error(`[poller] failed to write ${file}:`, e.message);
+    return false;
+  }
 }
 
 function describeAction(action) {
@@ -65,12 +74,8 @@ function describeAction(action) {
   return { category, symptom, entityType, entityId, severity: action.severity ?? null, uuid: action.uuid };
 }
 
-// Runs one investigation and appends its result to the shared findings store.
-// `trigger` is the compact summary shown in the UI list before expanding. When
-// `offerAction` is set, also asks Jarvis to PROPOSE (never execute) one of the 3
-// approved remediation actions — stored on the record for a human to approve via
-// POST /api/findings/:id/approve. Only used for genuinely new issues, never for
-// resolution confirmations (nothing to remediate once it's already clearing).
+// Runs one investigation, records its evidence, then either executes one eligible
+// action or leaves a narrowly-scoped proposal for human review.
 async function investigateAndRecord(prompt, trigger, findings, offerAction = false) {
   console.log(`[poller] investigating: ${trigger.symptom}`);
   let result;
@@ -86,21 +91,93 @@ async function investigateAndRecord(prompt, trigger, findings, offerAction = fal
     trigger,
     finding: result.text,
     toolLog: result.toolLog,
+    actionDecision: { status: "not_evaluated" },
   };
 
   if (offerAction) {
     try {
-      const proposal = await proposeRemediation(result.text, `[${trigger.source}] ${trigger.category}: ${trigger.symptom} (${trigger.entity})`);
-      if (proposal.proposal !== "no_action") {
-        record.proposedAction = { name: proposal.proposal, params: proposal.params, reason: proposal.reason, status: "pending" };
-        console.log(`[poller] proposed action: ${proposal.proposal} — ${proposal.reason}`);
+      const observedEvidence = Array.isArray(result.observedEvidence) ? result.observedEvidence.join("\n\n") : "";
+      const investigationIncomplete = result.text.includes("investigation did not conclude within the turn limit");
+      if (!observedEvidence || !result.evidenceCapturedAt || investigationIncomplete) {
+        record.actionDecision = {
+          status: "blocked",
+          reason: investigationIncomplete
+            ? "Investigation did not conclude; no action was considered."
+            : "No timestamped direct read-only evidence was available; no action was considered.",
+        };
+      } else {
+        const proposal = await proposeRemediation(
+          result.text,
+          `[${trigger.source}] ${trigger.category}: ${trigger.symptom} (${trigger.entity})`,
+          Array.isArray(result.observedEvidence) ? result.observedEvidence : [],
+          result.evidenceCapturedAt,
+        );
+        if (proposal.proposal !== "no_action") {
+          const eligibility = evaluateRemediation(proposal, observedEvidence, trigger.source, remediationEnabled());
+          const previousAttempt = hasPreviousActionAttempt(findings, trigger.id);
+          record.proposedAction = {
+            name: proposal.proposal,
+            params: proposal.params,
+            reason: proposal.reason,
+            confidence: eligibility.confidence,
+            evidenceFor: proposal.evidenceFor,
+            evidenceAgainst: proposal.evidenceAgainst,
+            evidenceCapturedAt: proposal.evidenceCapturedAt,
+            eligibility,
+            status: !eligibility.approvalEligible ? "blocked"
+              : !remediationEnabled() ? "disabled"
+                : eligibility.autonomousEligible && previousAttempt ? "not_run"
+                  : eligibility.autonomousEligible ? "executing" : "pending",
+            executionMode: eligibility.autonomousEligible && !previousAttempt ? "autonomous"
+              : eligibility.approvalEligible && remediationEnabled() && !eligibility.autonomousEligible ? "human_approval"
+                : "none",
+            createdAt: new Date().toISOString(),
+          };
+          record.actionDecision = {
+            status: record.proposedAction.status,
+            reason: previousAttempt && eligibility.autonomousEligible
+              ? "An action was already attempted for this alert; Jarvis will not retry it."
+              : eligibility.reason,
+            checks: eligibility.checks,
+          };
+
+          if (record.proposedAction.status === "executing") {
+            record.proposedAction.executionStartedAt = new Date().toISOString();
+            findings.unshift(record);
+            persistFindings(findings);
+            const outcome = await executeAndVerify(
+              { name: proposal.proposal, params: proposal.params, reason: proposal.reason },
+              executeRemediation,
+              verifyRemediation,
+            );
+            record.proposedAction.status = outcome.status;
+            record.proposedAction.result = outcome.result;
+            record.proposedAction.executedAt = new Date().toISOString();
+            record.proposedAction.verification = outcome.verification;
+            record.actionDecision.status = record.proposedAction.status;
+            persistFindings(findings);
+          } else if (!eligibility.approvalEligible) {
+            record.actionDecision.status = "blocked";
+            record.actionDecision.reason = eligibility.reason;
+          }
+        } else {
+          record.actionDecision = {
+            status: "no_action",
+            reason: proposal.reason,
+            confidence: proposal.confidence,
+          };
+        }
       }
     } catch (e) {
       console.error("[poller] proposeRemediation failed:", e.message);
+      record.actionDecision = { status: "decision_failed", reason: e.message };
     }
   }
 
-  findings.unshift(record);
+  if (!findings.includes(record)) {
+    findings.unshift(record);
+    persistFindings(findings);
+  }
   notify(record).catch(e => console.error("[poller] notify failed:", e.message));
 }
 
@@ -393,7 +470,7 @@ async function pollOnce() {
   await pollCentralAlerts(findings);
 
   if (findings.length !== before) {
-    saveJson(FINDINGS_FILE, findings.slice(0, MAX_FINDINGS));
+    persistFindings(findings);
   }
 }
 
@@ -401,17 +478,39 @@ export function getFindings() {
   return loadJson(FINDINGS_FILE, []);
 }
 
-// Read-modify-write a single finding by id. Used only by the human-approval route
-// (routes/findings.js) to record an approval decision and its outcome — the poller's
-// own writes to this same file are a full-array replace on a 2-minute cadence, and
-// actual approvals are rare enough that a plain read-modify-write is fine here without
-// adding file locking for a race window this narrow.
+export function persistFindings(findings) {
+  ensureDataDir();
+  const temporaryFile = `${FINDINGS_FILE}.tmp`;
+  // Poller snapshots can outlive an approval request; merge forward-only action
+  // states before writing so an older snapshot cannot make an action retryable.
+  const current = new Map(loadJson(FINDINGS_FILE, []).map(finding => [
+    `${finding.id}:${finding.timestamp}`,
+    finding,
+  ]));
+  const merged = findings.map(finding => preserveLatestActionState(
+    finding,
+    current.get(`${finding.id}:${finding.timestamp}`),
+  ));
+  try {
+    fs.writeFileSync(temporaryFile, JSON.stringify(merged.slice(0, MAX_FINDINGS)));
+    fs.renameSync(temporaryFile, FINDINGS_FILE);
+  } catch (error) {
+    try { fs.unlinkSync(temporaryFile); } catch (cleanupError) {
+      if (cleanupError.code !== "ENOENT") console.error(`[poller] failed to remove ${temporaryFile}:`, cleanupError.message);
+    }
+    console.error(`[poller] failed to persist ${FINDINGS_FILE}:`, error.message);
+    throw new Error("Failed to persist Jarvis findings; refusing to run or approve remediation.");
+  }
+}
+
+// Read-modify-write one finding for the human approval route. persistFindings()
+// keeps lifecycle transitions monotonic if a poller snapshot races this update.
 export function updateFinding(id, updater) {
   const findings = loadJson(FINDINGS_FILE, []);
   const idx = findings.findIndex(f => f.id === id);
   if (idx === -1) return null;
   updater(findings[idx]);
-  saveJson(FINDINGS_FILE, findings);
+  persistFindings(findings);
   return findings[idx];
 }
 

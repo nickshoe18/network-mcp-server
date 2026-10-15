@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-10-15, after commit `86158a4`.
+Last updated: 2026-10-15, with Jarvis Level 2 deployed to the lab NetOps stack.
 
 ## What this repo actually contains
 
@@ -13,11 +13,11 @@ Two architecturally separate things that happen to live together:
    GitHub Copilot's VS Code agent mode could too, since MCP is an open protocol, not an
    Anthropic-only thing).
 2. **Jarvis** — a Claude-specific system built *on top of* that MCP server. Two parts:
-   - An interactive Claude Code subagent (`.claude/agents/jarvis.md`) — Level 1 network engineer
-     triage, read-only by default, a few explicitly-authorizable write actions.
+   - An interactive Claude Code subagent (`.claude/agents/jarvis.md`) — Level 2 evidence-led
+     diagnosis, read-only investigations, and bounded action guidance that honors MCP gates.
    - An autonomous "autopilot" backend (`netops-ui/backend/`) that polls Mist's Marvis Actions,
-     Mist SLE, and Aruba Central alerts; runs real investigations; proposes narrow
-     human-approved remediation.
+     Mist SLE, and Aruba Central alerts; runs real investigations; and can execute narrow
+     confidence-gated remediation through an isolated write path.
 
 **Important distinction if anyone considers moving this to a different AI tool:** the MCP server
 is portable (point any MCP client at `http://localhost:8000/mcp`). Jarvis is not — the autopilot
@@ -63,6 +63,25 @@ Separately, **not** in docker-compose: a standalone Panthers channel-utilization
   `locate_central_device`). No Central equivalent of DHCP lease release exists.
 
 See `git log` and the commit message on `86158a4` for the full detail.
+
+## Jarvis Level 2 action policy
+
+The current Level 2 implementation keeps interactive queries read-only and adds evidence-led
+diagnosis to Jarvis's role and autopilot. The autopilot may autonomously run only one of the
+existing seven bounded actions: locate one device LED; disconnect one client or release one
+client DHCP lease; reboot one identified, reachable device. It requires confidence >= 0.85,
+two exact supporting evidence snippets from direct read-only tool output captured within five
+minutes, no reported contrary evidence, exact target identity, matching platform,
+action-specific preconditions, and the remediation master switch.
+
+Low-confidence proposals remain human-approval-only when all mandatory safety checks pass;
+invalid targets or failed safety checks are blocked. Approval proposals expire after five
+minutes. Each alert receives at most one action attempt; outcomes and read-only post-action
+verification are stored in the finding. Physical LED state cannot be verified via read-only
+telemetry and is reported as such. The lab NetOps stack was explicitly enabled on 2026-10-15
+(`JARVIS_REMEDIATION_ENABLED=true`) after review and acceptance of the service-impact risk of
+disconnects, lease releases, and reboots. The Compose default remains false, so other/new
+deployments require a deliberate opt-in.
 
 ## Known limitations / open items
 

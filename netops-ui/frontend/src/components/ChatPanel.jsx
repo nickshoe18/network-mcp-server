@@ -61,7 +61,7 @@ function ModeToggle({ mode, onModeChange, disabled, remote }) {
       {btn("assistant", "Assistant")}
       {btn("jarvis", "Jarvis")}
       <span style={{ fontSize: 11, color: "#555", marginLeft: 8 }}>
-        {mode === "jarvis" ? "Level 1 engineer · read-only · uses runbooks" : "General network assistant"}
+        {mode === "jarvis" ? "Level 2 engineer · evidence-led · interactive read-only" : "General network assistant"}
       </span>
     </div>
   );
@@ -95,8 +95,8 @@ export function ChatPanel({ messages, streaming, activeTools, onSend, mode = "as
         {messages.length === 0 && isJarvis && (
           <div style={{ textAlign: "center", marginTop: 60, color: "#444" }}>
             <div style={{ fontSize: 32, marginBottom: 12, color: "#1B8C6E" }}>◈</div>
-            <div style={{ fontSize: 14, marginBottom: 6, color: "#8ab" }}>Jarvis · Level 1 Network Engineer</div>
-            <div style={{ fontSize: 12, marginBottom: 18 }}>Read-only triage for the lab network. Ask for a status update or describe a problem.</div>
+            <div style={{ fontSize: 14, marginBottom: 6, color: "#8ab" }}>Jarvis · Level 2 Network Engineer</div>
+            <div style={{ fontSize: 12, marginBottom: 18 }}>Evidence-led, read-only diagnosis. The alert autopilot can take bounded actions only when confidence and safety gates pass. Ask for a status update or describe a problem.</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 520, margin: "0 auto" }}>
               {JARVIS_STARTERS.map(s => (
                 <button key={s} onClick={() => onSend(s)} disabled={streaming}
