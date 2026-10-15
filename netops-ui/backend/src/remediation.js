@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 // Dedicated, isolated MCP instance (hpe-mcp-autopilot in docker-compose.yml) — separate
 // from MCP_SERVER_URL, which stays used for all read-only investigation. Only this client
-// ever calls a write tool, and only for the 4 exact actions below.
+// ever calls a write tool, and only for the 8 exact actions below.
 const AUTOPILOT_MCP_URL = process.env.MCP_AUTOPILOT_SERVER_URL || "http://hpe-mcp-autopilot:8000/mcp";
 const HDR = { "Content-Type": "application/json", "Accept": "application/json, text/event-stream" };
 
@@ -63,7 +63,7 @@ function auditLog(action, params, result) {
   return line;
 }
 
-// ── The 4 approved actions — each takes exactly the ids it names, nothing else ──
+// ── The 8 approved actions — each takes exactly the ids it names, nothing else ──
 
 export async function rebootAp(site_id, device_id) {
   if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
@@ -87,7 +87,53 @@ export async function setLocateLed(site_id, device_id, enabled) {
   return result;
 }
 
-// release_dhcp_lease deliberately NOT implemented — the real request body shape for
-// scoping the release to one client (vs. every lease on the device) couldn't be verified
-// against authoritative docs. Add it only once that's confirmed against a real Mist
-// dashboard API reference session, not guessed.
+// Request shape confirmed against the real OpenAPI spec (schema utils_release_dhcp_leases,
+// bundled spec_index.db) — `macs` + `network` releases exactly the named client leases on
+// that network, scoped to one gateway device; `port_id` alone (not used here) would release
+// every lease on a port instead, which is broader than Jarvis should ever propose.
+export async function releaseDhcpLease(site_id, device_id, macs, network) {
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  const result = await callWriteTool("mist_release_site_device_dhcp_lease", { site_id, device_id, macs, network });
+  auditLog("release_dhcp_lease", { site_id, device_id, macs, network }, result);
+  return result;
+}
+
+// ── Aruba Central equivalents — same gate, same isolated instance, same audit log ──
+// Central has no site_id/device_id pair like Mist; its device-level write tools address a
+// device directly by device_family/serial_number (confirmed against the real tool schemas,
+// central_get_tool_schema), so these take that shape instead.
+
+export async function rebootCentralDevice(device_family, serial_number) {
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  const result = await callWriteTool("central_reboot_device", { device_family, serial_number });
+  auditLog("reboot_central_device", { device_family, serial_number }, result);
+  return result;
+}
+
+// device_kind picks the right underlying Central tool — each targets a different device
+// class with a different param name for the client MAC (confirmed per-tool via
+// central_get_tool_schema: user_mac_address on an AP, mac_address + device_type on a
+// switch, client_mac_address on a gateway).
+export async function disconnectCentralClient(device_kind, serial_number, mac, switch_type) {
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  let tool, params;
+  if (device_kind === "ap") { tool = "central_disconnect_user_by_mac_on_ap"; params = { serial_number, user_mac_address: mac }; }
+  else if (device_kind === "switch") { tool = "central_disconnect_client_switch"; params = { serial_number, device_type: switch_type, mac_address: mac }; }
+  else if (device_kind === "gateway") { tool = "central_disconnect_client_by_mac_on_gateway"; params = { serial_number, client_mac_address: mac }; }
+  else return { ok: false, error: `unknown device_kind '${device_kind}'` };
+
+  const result = await callWriteTool(tool, params);
+  auditLog("disconnect_central_client", { device_kind, serial_number, mac }, result);
+  return result;
+}
+
+export async function locateCentralDevice(device_family, serial_number) {
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  const result = await callWriteTool("central_locate_device", { device_family, serial_number });
+  auditLog("locate_central_device", { device_family, serial_number }, result);
+  return result;
+}
+
+// No Central equivalent of release_dhcp_lease was found — Central's DHCP tools
+// (central_manage_dhcp_client, etc.) are config-object CRUD, not an operational
+// "release this one client's lease now" action. Left out rather than guessed at.

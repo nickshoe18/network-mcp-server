@@ -74,7 +74,7 @@ services:
     environment:
       - ENABLE_MIST_WRITE_TOOLS=true
       - DISABLE_ELICITATION=true
-      - ENABLE_CENTRAL_WRITE_TOOLS=false
+      - ENABLE_CENTRAL_WRITE_TOOLS=true
       - ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS=false
       - ENABLE_CLEARPASS_WRITE_TOOLS=false
       - ENABLE_GREENLAKE_WRITE_TOOLS=false
@@ -192,6 +192,33 @@ services:
       retries: 5
       start_period: 90s
 
+  # Customer tenant "Knights" (Classic Central, OAuth2 refresh-token grant --
+  # rotates on every use; own read-write bind + write path for the rotated token).
+  hpe-mcp-knights:
+    build:
+      context: /Users/nickshoemaker/hpe-networking-mcp-v2
+      dockerfile: Dockerfile
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+    container_name: hpe-mcp-knights
+    volumes:
+      - ${KNIGHTS_SECRETS_DIR:-./hpe-secrets-knights}:/run/secrets:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../zscaler-full-chain.pem:/tmp/zscaler-chain.pem:ro
+      - ${SECRETS_DIR:-./hpe-secrets}/../docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ${KNIGHTS_SECRETS_DIR:-./hpe-secrets-knights}/classic_central_refresh_token:/run/secrets-rw/classic_central_refresh_token
+    ports:
+      - "127.0.0.1:8006:8000"
+    environment:
+      - CLASSIC_CENTRAL_REFRESH_TOKEN_WRITE_PATH=/run/secrets-rw/classic_central_refresh_token
+      - ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS=${ENABLE_CLASSIC_CENTRAL_WRITE_TOOLS_KNIGHTS:-false}
+      - MCP_TOOL_MODE=${MCP_TOOL_MODE:-code}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('localhost',8000)); s.close()\" 2>/dev/null || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
   backend:
     build:
       context: ./backend
@@ -217,6 +244,9 @@ services:
       - MIST_SITE_ID=${MIST_SITE_ID:-59f74351-5c94-49bf-adea-dc96f4b132bf}
       - MARVIS_MCP_URL=https://mcp.ai.juniper.net/mcp/mist
       - MARVIS_HEADER_FILE=/run/secrets/juniper_mist_headers.txt
+      # Central alerts: polled through the same hpe-mcp server as the investigation itself
+      # (see centralClient.js) — Hall of Justice + Bat Cave, Sandbox Testing excluded (0 devices).
+      - CENTRAL_SITE_IDS=${CENTRAL_SITE_IDS:-44056656981,791595406}
       # External alerting for autopilot findings — each channel is a no-op until its
       # secret file has real content in it (see secrets/teams_webhook_url.txt,
       # secrets/resend_api_key.txt). NOTIFY_SEVERITY_FLOOR: only Marvis findings at or
@@ -225,8 +255,21 @@ services:
       - RESEND_API_KEY_FILE=/run/secrets/resend_api_key.txt
       - NOTIFY_EMAIL_FROM=${NOTIFY_EMAIL_FROM:-}
       - NOTIFY_EMAIL_TO=${NOTIFY_EMAIL_TO:-}
+      - NOTIFY_EMAIL_ENABLED=${NOTIFY_EMAIL_ENABLED:-true}
       - NOTIFY_SEVERITY_FLOOR=${NOTIFY_SEVERITY_FLOOR:-50}
-      # Stage 2: proposes (never auto-executes) one of 3 narrow actions on a new finding;
+      # SLE breach episode tracking (see poller.js pollSleBreaches) — one alert when an
+      # episode starts, a reminder at most once per cooldown while it's still ongoing,
+      # one alert on resolution. Prevents the per-poll-cycle email storm a shifting
+      # "hourly" bucket boundary caused before this existed.
+      - JARVIS_SLE_EPISODE_GAP_MS=${JARVIS_SLE_EPISODE_GAP_MS:-5400000}
+      - JARVIS_SLE_RENOTIFY_COOLDOWN_MS=${JARVIS_SLE_RENOTIFY_COOLDOWN_MS:-14400000}
+      # Marvis action resolution debounce + per-entity flap cooldown (see poller.js
+      # pollMarvisActions) -- fixes repeated "resolved" emails for one still-flapping
+      # action and throttles repeat full investigations for a flapping device.
+      - JARVIS_RESOLUTION_CONFIRM_POLLS=${JARVIS_RESOLUTION_CONFIRM_POLLS:-2}
+      - JARVIS_ENTITY_ALERT_COOLDOWN_MS=${JARVIS_ENTITY_ALERT_COOLDOWN_MS:-1800000}
+      # Stage 2: proposes (never auto-executes) one of 7 narrow actions (4 Mist + 3 Central)
+      # on a new finding;
       # a human must click Approve in the UI (POST /api/findings/:id/approve) before
       # anything runs. Execution itself goes to the ISOLATED hpe-mcp-autopilot instance,
       # never the main hpe-mcp above. Master off-switch defaults to false on purpose —

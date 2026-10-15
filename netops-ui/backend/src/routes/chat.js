@@ -1,6 +1,7 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { JARVIS_SYSTEM, JARVIS_TOOLS, JARVIS_MODEL, readRunbook, checkReadOnly } from "../jarvis.js";
+import { cachedSystem, cachedTools, withCacheBreakpoint } from "../anthropicCache.js";
 
 export const chatRouter = Router();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -111,8 +112,8 @@ chatRouter.post("/", async (req, res) => {
 
   const jarvis = req.body.mode === "jarvis" || req.remote === true;
   const model = jarvis ? JARVIS_MODEL : "claude-sonnet-4-5";
-  const system = jarvis ? JARVIS_SYSTEM : ASSISTANT_SYSTEM;
-  const tools = jarvis ? JARVIS_TOOLS : TOOLS;
+  const system = cachedSystem(jarvis ? JARVIS_SYSTEM : ASSISTANT_SYSTEM);
+  const tools = cachedTools(jarvis ? JARVIS_TOOLS : TOOLS);
   const maxTokens = jarvis ? 8192 : 4096;
 
   res.setHeader("X-Netops-Mode", jarvis ? "jarvis" : "assistant");
@@ -134,7 +135,7 @@ chatRouter.post("/", async (req, res) => {
         model,
         max_tokens: maxTokens,
         system,
-        messages: currentMessages,
+        messages: withCacheBreakpoint(currentMessages),
         tools,
       });
 

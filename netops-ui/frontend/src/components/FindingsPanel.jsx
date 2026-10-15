@@ -16,6 +16,10 @@ const ACTION_LABELS = {
   reboot_ap: "Reboot AP",
   disconnect_client: "Disconnect client",
   locate_led: "Toggle locate LED",
+  release_dhcp_lease: "Release DHCP lease",
+  reboot_central_device: "Reboot device (Central)",
+  disconnect_central_client: "Disconnect client (Central)",
+  locate_central_device: "Toggle locate LED (Central)",
 };
 
 const STATUS_STYLE = {

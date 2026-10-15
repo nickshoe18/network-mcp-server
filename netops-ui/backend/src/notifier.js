@@ -4,6 +4,7 @@ const TEAMS_WEBHOOK_FILE = process.env.TEAMS_WEBHOOK_FILE || "/run/secrets/teams
 const RESEND_API_KEY_FILE = process.env.RESEND_API_KEY_FILE || "/run/secrets/resend_api_key.txt";
 const EMAIL_FROM = process.env.NOTIFY_EMAIL_FROM || "";
 const EMAIL_TO = (process.env.NOTIFY_EMAIL_TO || "").split(",").map(s => s.trim()).filter(Boolean);
+const EMAIL_ENABLED = (process.env.NOTIFY_EMAIL_ENABLED ?? "true") === "true";
 
 // Only push external notifications for findings that clear this bar — everything
 // still lands in the UI's Autonomous Findings panel regardless of severity.
@@ -53,6 +54,7 @@ async function notifyTeams(record) {
 }
 
 async function notifyEmail(record) {
+  if (!EMAIL_ENABLED) return;
   const apiKey = readSecretFile(RESEND_API_KEY_FILE);
   if (!apiKey || !EMAIL_FROM || EMAIL_TO.length === 0) return;
 

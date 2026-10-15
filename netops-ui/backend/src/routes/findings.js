@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { getFindings, updateFinding } from "../poller.js";
-import { rebootAp, disconnectClient, setLocateLed, remediationEnabled } from "../remediation.js";
+import {
+  rebootAp, disconnectClient, setLocateLed, releaseDhcpLease,
+  rebootCentralDevice, disconnectCentralClient, locateCentralDevice,
+  remediationEnabled,
+} from "../remediation.js";
 
 export const findingsRouter = Router();
 
@@ -28,6 +32,10 @@ findingsRouter.post("/:id/approve", async (req, res) => {
     if (proposal.name === "reboot_ap") result = await rebootAp(p.site_id, p.device_id);
     else if (proposal.name === "disconnect_client") result = await disconnectClient(p.site_id, p.client_mac);
     else if (proposal.name === "locate_led") result = await setLocateLed(p.site_id, p.device_id, p.enabled);
+    else if (proposal.name === "release_dhcp_lease") result = await releaseDhcpLease(p.site_id, p.device_id, p.macs, p.network);
+    else if (proposal.name === "reboot_central_device") result = await rebootCentralDevice(p.device_family, p.serial_number);
+    else if (proposal.name === "disconnect_central_client") result = await disconnectCentralClient(p.device_kind, p.serial_number, p.mac, p.switch_type);
+    else if (proposal.name === "locate_central_device") result = await locateCentralDevice(p.device_family, p.serial_number);
     else return res.status(400).json({ ok: false, error: `unknown action ${proposal.name}` });
   } catch (e) {
     result = { ok: false, error: e.message };
