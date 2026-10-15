@@ -46,19 +46,17 @@ services:
   # doesn't work for a truly headless client). That is a container-wide bypass
   # of the confirmation gate, so the narrow scoping has to live here, at the
   # infrastructure level, not just in application code:
-  #   - ONLY Mist write tools are enabled -- every other platform is hardcoded
-  #     false below, deliberately NOT referencing the shared ENABLE_*_WRITE_TOOLS
-  #     vars from .env (those default several platforms to true for the main
-  #     hpe-mcp above; inheriting that here would silently confirmation-bypass
-  #     Central/ClearPass/AOS8 writes too).
+  #   - ONLY Mist and New Central write tools are enabled -- every other platform
+  #     is hardcoded false below, deliberately NOT referencing the shared
+  #     ENABLE_*_WRITE_TOOLS vars from .env.
   #   - No customer tenant secrets or credentials anywhere in this service.
-  #   - Same secrets/ as the lab hpe-mcp (Mist-only credentials actually get
-  #     used; the mount is read-only regardless).
-  # The actual "only 4 specific single-entity tool calls, only after a read-only
+  #   - Same secrets/ as the lab hpe-mcp (lab Mist and New Central credentials
+  #     are used; the mount is read-only regardless).
+  # The actual "only 7 specific single-entity tool calls, only after a read-only
   # investigation names the target, every use logged" narrowing is enforced in
-  # remediation.js, not here -- this container being reachable would still let
-  # anyone who can reach 127.0.0.1:8005 call any enabled Mist write tool
-  # unconfirmed, so nothing else should ever be pointed at this port.
+  # remediation.js, not here -- reaching 127.0.0.1:8005 directly bypasses the
+  # backend policy and can call any enabled Mist or Central write tool unconfirmed.
+  # Never expose this port or point any other client at it.
   hpe-mcp-autopilot:
     build:
       context: /Users/nickshoemaker/hpe-networking-mcp-v2
@@ -268,12 +266,11 @@ services:
       # action and throttles repeat full investigations for a flapping device.
       - JARVIS_RESOLUTION_CONFIRM_POLLS=${JARVIS_RESOLUTION_CONFIRM_POLLS:-2}
       - JARVIS_ENTITY_ALERT_COOLDOWN_MS=${JARVIS_ENTITY_ALERT_COOLDOWN_MS:-1800000}
-      # Stage 2: proposes (never auto-executes) one of 7 narrow actions (4 Mist + 3 Central)
-      # on a new finding;
-      # a human must click Approve in the UI (POST /api/findings/:id/approve) before
-      # anything runs. Execution itself goes to the ISOLATED hpe-mcp-autopilot instance,
-      # never the main hpe-mcp above. Master off-switch defaults to false on purpose —
-      # this whole capability has to be turned on deliberately, per session.
+      # Level 2: may auto-execute one of 7 narrow actions (4 Mist + 3 Central) only when
+      # confidence >= 0.85 and every deterministic identity/evidence/action gate passes.
+      # Otherwise a safe proposal remains available for human approval. Execution uses
+      # the ISOLATED hpe-mcp-autopilot instance, never the main hpe-mcp above. Master
+      # off-switch defaults to false on purpose — enable deliberately per environment.
       - MCP_AUTOPILOT_SERVER_URL=http://hpe-mcp-autopilot:8000/mcp
       - JARVIS_REMEDIATION_ENABLED=${JARVIS_REMEDIATION_ENABLED:-false}
     volumes:

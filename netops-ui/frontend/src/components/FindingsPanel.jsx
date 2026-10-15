@@ -24,24 +24,30 @@ const ACTION_LABELS = {
 
 const STATUS_STYLE = {
   pending: { color: "#E08A00", bg: "#E08A001a", label: "Awaiting approval" },
+  executing: { color: "#55A6D9", bg: "#55A6D91a", label: "Executing" },
   executed: { color: "#1B8C6E", bg: "#1B8C6E1a", label: "Executed" },
   failed: { color: "#C4314B", bg: "#C4314B1a", label: "Failed" },
   declined: { color: "#666", bg: "#2a2d3a", label: "Declined" },
+  blocked: { color: "#C4314B", bg: "#C4314B1a", label: "Blocked by safety checks" },
+  disabled: { color: "#666", bg: "#2a2d3a", label: "Remediation disabled" },
+  stale: { color: "#C4314B", bg: "#C4314B1a", label: "Evidence expired" },
+  not_run: { color: "#666", bg: "#2a2d3a", label: "Not retried" },
 };
 
-function ProposedAction({ findingId, action, onChanged }) {
+function ProposedAction({ findingId, action, decision, onChanged }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const style = STATUS_STYLE[action.status] || STATUS_STYLE.pending;
 
   const act = async (verb) => {
     setBusy(true);
+    setError("");
     try {
       const res = await fetch(`/api/findings/${findingId}/${verb}`, { method: "POST" });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `${verb} failed`);
     } catch (e) {
-      // surfaced via the status badge on refetch either way — a toast isn't worth the weight here
-      console.error(e);
+      setError(e.message);
     } finally {
       setBusy(false);
       onChanged();
@@ -55,6 +61,27 @@ function ProposedAction({ findingId, action, onChanged }) {
         <span style={{ fontSize: 9, color: style.color, background: style.bg, borderRadius: 10, padding: "1px 7px", textTransform: "uppercase", letterSpacing: ".04em" }}>{style.label}</span>
       </div>
       <div style={{ fontSize: 11, color: "#888", lineHeight: 1.4, marginBottom: action.status === "pending" ? 8 : 0 }}>{action.reason}</div>
+      {action.eligibility?.reason && (
+        <div style={{ fontSize: 10, color: "#777", marginTop: 3 }}>{action.eligibility.reason}</div>
+      )}
+      {decision?.reason && ["blocked", "disabled", "not_run", "stale"].includes(action.status) && (
+        <div style={{ fontSize: 10, color: "#777", marginTop: 3 }}>{decision.reason}</div>
+      )}
+      {Number.isFinite(action.confidence) && (
+        <div style={{ fontSize: 10, color: "#666", marginTop: 3 }}>
+          Confidence: {(action.confidence * 100).toFixed(0)}% · {action.executionMode === "autonomous" ? "autonomous policy" : "human approval"}
+        </div>
+      )}
+      {action.evidenceFor?.length > 0 && (
+        <div style={{ fontSize: 10, color: "#777", marginTop: 5 }}>
+          Evidence: {action.evidenceFor.join(" · ")}
+        </div>
+      )}
+      {action.eligibility?.checks?.some(check => !check.passed) && (
+        <div style={{ fontSize: 10, color: "#C4314B", marginTop: 4 }}>
+          Checks not passed: {action.eligibility.checks.filter(check => !check.passed).map(check => check.name).join(", ")}
+        </div>
+      )}
       {action.status === "pending" && (
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={() => act("approve")} disabled={busy}
@@ -70,6 +97,12 @@ function ProposedAction({ findingId, action, onChanged }) {
       {action.status === "failed" && action.result?.error && (
         <div style={{ fontSize: 10, color: "#C4314B", marginTop: 4 }}>{action.result.error}</div>
       )}
+      {action.result?.ok && action.verification?.summary && (
+        <div style={{ fontSize: 10, color: action.verification.status === "verified" ? "#1B8C6E" : "#888", marginTop: 5 }}>
+          Verification ({action.verification.status}): {action.verification.summary}
+        </div>
+      )}
+      {error && <div style={{ fontSize: 10, color: "#C4314B", marginTop: 5 }}>{error}</div>}
     </div>
   );
 }
@@ -98,7 +131,15 @@ function FindingRow({ item, onChanged }) {
               Checked: {item.toolLog.join(", ")}
             </div>
           )}
-          {item.proposedAction && <ProposedAction findingId={item.id} action={item.proposedAction} onChanged={onChanged} />}
+          {item.proposedAction && (
+            <ProposedAction findingId={item.id} action={item.proposedAction} decision={item.actionDecision} onChanged={onChanged} />
+          )}
+          {!item.proposedAction && item.actionDecision?.status && item.actionDecision.status !== "not_evaluated" && (
+            <div style={{ marginTop: 8, fontSize: 10, color: "#888" }}>
+              Action decision: <strong>{item.actionDecision.status.replaceAll("_", " ")}</strong>
+              {item.actionDecision.reason ? ` — ${item.actionDecision.reason}` : ""}
+            </div>
+          )}
         </div>
       )}
     </div>

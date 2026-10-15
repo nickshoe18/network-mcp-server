@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 // Dedicated, isolated MCP instance (hpe-mcp-autopilot in docker-compose.yml) — separate
 // from MCP_SERVER_URL, which stays used for all read-only investigation. Only this client
-// ever calls a write tool, and only for the 8 exact actions below.
+// ever calls a write tool, and only for the 7 exact actions below.
 const AUTOPILOT_MCP_URL = process.env.MCP_AUTOPILOT_SERVER_URL || "http://hpe-mcp-autopilot:8000/mcp";
 const HDR = { "Content-Type": "application/json", "Accept": "application/json, text/event-stream" };
 
@@ -42,7 +42,7 @@ function parseResult(text) {
 }
 
 // The ONLY place `confirmed: true` is ever set — fixed infrastructure code, never
-// LLM-generated text, and only reachable through the 4 narrow functions below, each of
+// LLM-generated text, and only reachable through the 7 narrow functions below, each of
 // which accepts exactly the single-entity string params it names and nothing else.
 async function callWriteTool(toolName, params) {
   if (!sessionId) sessionId = await initSession();
@@ -63,7 +63,7 @@ function auditLog(action, params, result) {
   return line;
 }
 
-// ── The 8 approved actions — each takes exactly the ids it names, nothing else ──
+// ── The 7 approved actions — each takes exactly the ids it names, nothing else ──
 
 export async function rebootAp(site_id, device_id) {
   if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
@@ -132,6 +132,22 @@ export async function locateCentralDevice(device_family, serial_number) {
   const result = await callWriteTool("central_locate_device", { device_family, serial_number });
   auditLog("locate_central_device", { device_family, serial_number }, result);
   return result;
+}
+
+export async function executeRemediation(name, params = {}) {
+  if (!remediationEnabled()) {
+    return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  }
+  if (name === "reboot_ap") return rebootAp(params.site_id, params.device_id);
+  if (name === "disconnect_client") return disconnectClient(params.site_id, params.client_mac);
+  if (name === "locate_led") return setLocateLed(params.site_id, params.device_id, params.enabled);
+  if (name === "release_dhcp_lease") return releaseDhcpLease(params.site_id, params.device_id, params.macs, params.network);
+  if (name === "reboot_central_device") return rebootCentralDevice(params.device_family, params.serial_number);
+  if (name === "disconnect_central_client") {
+    return disconnectCentralClient(params.device_kind, params.serial_number, params.mac, params.switch_type);
+  }
+  if (name === "locate_central_device") return locateCentralDevice(params.device_family, params.serial_number);
+  return { ok: false, error: `unsupported remediation action '${name}'` };
 }
 
 // No Central equivalent of release_dhcp_lease was found — Central's DHCP tools
