@@ -102,7 +102,7 @@ async def run(a, api_host, ws_host, headers, channel, device_id, body) -> int:
         while time.time() < deadline:
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if got_output and time.time() - last > 6:
                     break
                 continue
