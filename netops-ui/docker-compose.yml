@@ -37,7 +37,7 @@ services:
       retries: 5
       start_period: 90s
 
-  # Dedicated, isolated instance used ONLY by the Jarvis autopilot's Stage 2
+  # Dedicated, isolated instance used ONLY by the FRIDAY autopilot's Stage 2
   # remediation calls (netops-backend/src/remediation.js) -- never by interactive
   # chat/subagent sessions, which keep using the main hpe-mcp above unchanged.
   # DISABLE_ELICITATION=true is what makes headless, unattended write calls
@@ -231,13 +231,17 @@ services:
       - PORT=3001
       - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/zscaler.crt
       - RUNBOOK_DIR=/app/runbooks
-      - JARVIS_MODEL=${JARVIS_MODEL:-claude-sonnet-5}
+      - FRIDAY_MODEL=${FRIDAY_MODEL:-}
+      - JARVIS_MODEL=${JARVIS_MODEL:-}
       - TAILSCALE_ALLOWED_LOGINS=${TAILSCALE_ALLOWED_LOGINS:-}
       # Stage 1 autopilot: polls Marvis Actions (official Juniper MCP) for the lab org and
-      # runs a read-only Jarvis investigation on anything new. See backend/src/poller.js.
-      - JARVIS_AUTOPILOT_ENABLED=${JARVIS_AUTOPILOT_ENABLED:-true}
-      - JARVIS_POLL_INTERVAL_MS=${JARVIS_POLL_INTERVAL_MS:-120000}
-      - JARVIS_DATA_DIR=/app/data
+      # runs a read-only FRIDAY investigation on anything new. See backend/src/poller.js.
+      - FRIDAY_AUTOPILOT_ENABLED=${FRIDAY_AUTOPILOT_ENABLED:-}
+      - JARVIS_AUTOPILOT_ENABLED=${JARVIS_AUTOPILOT_ENABLED:-}
+      - FRIDAY_POLL_INTERVAL_MS=${FRIDAY_POLL_INTERVAL_MS:-}
+      - JARVIS_POLL_INTERVAL_MS=${JARVIS_POLL_INTERVAL_MS:-}
+      - FRIDAY_DATA_DIR=${FRIDAY_DATA_DIR:-}
+      - JARVIS_DATA_DIR=${JARVIS_DATA_DIR:-}
       - MIST_ORG_ID=${MIST_ORG_ID:-5f24e447-1145-4efa-94e0-ccec1a2a00a7}
       - MIST_SITE_ID=${MIST_SITE_ID:-59f74351-5c94-49bf-adea-dc96f4b132bf}
       - MARVIS_MCP_URL=https://mcp.ai.juniper.net/mcp/mist
@@ -259,20 +263,25 @@ services:
       # episode starts, a reminder at most once per cooldown while it's still ongoing,
       # one alert on resolution. Prevents the per-poll-cycle email storm a shifting
       # "hourly" bucket boundary caused before this existed.
-      - JARVIS_SLE_EPISODE_GAP_MS=${JARVIS_SLE_EPISODE_GAP_MS:-5400000}
-      - JARVIS_SLE_RENOTIFY_COOLDOWN_MS=${JARVIS_SLE_RENOTIFY_COOLDOWN_MS:-14400000}
+      - FRIDAY_SLE_EPISODE_GAP_MS=${FRIDAY_SLE_EPISODE_GAP_MS:-}
+      - JARVIS_SLE_EPISODE_GAP_MS=${JARVIS_SLE_EPISODE_GAP_MS:-}
+      - FRIDAY_SLE_RENOTIFY_COOLDOWN_MS=${FRIDAY_SLE_RENOTIFY_COOLDOWN_MS:-}
+      - JARVIS_SLE_RENOTIFY_COOLDOWN_MS=${JARVIS_SLE_RENOTIFY_COOLDOWN_MS:-}
       # Marvis action resolution debounce + per-entity flap cooldown (see poller.js
       # pollMarvisActions) -- fixes repeated "resolved" emails for one still-flapping
       # action and throttles repeat full investigations for a flapping device.
-      - JARVIS_RESOLUTION_CONFIRM_POLLS=${JARVIS_RESOLUTION_CONFIRM_POLLS:-2}
-      - JARVIS_ENTITY_ALERT_COOLDOWN_MS=${JARVIS_ENTITY_ALERT_COOLDOWN_MS:-1800000}
+      - FRIDAY_RESOLUTION_CONFIRM_POLLS=${FRIDAY_RESOLUTION_CONFIRM_POLLS:-}
+      - JARVIS_RESOLUTION_CONFIRM_POLLS=${JARVIS_RESOLUTION_CONFIRM_POLLS:-}
+      - FRIDAY_ENTITY_ALERT_COOLDOWN_MS=${FRIDAY_ENTITY_ALERT_COOLDOWN_MS:-}
+      - JARVIS_ENTITY_ALERT_COOLDOWN_MS=${JARVIS_ENTITY_ALERT_COOLDOWN_MS:-}
       # Level 2: may auto-execute one of 7 narrow actions (4 Mist + 3 Central) only when
       # confidence >= 0.85 and every deterministic identity/evidence/action gate passes.
       # Otherwise a safe proposal remains available for human approval. Execution uses
       # the ISOLATED hpe-mcp-autopilot instance, never the main hpe-mcp above. Master
       # off-switch defaults to false on purpose — enable deliberately per environment.
       - MCP_AUTOPILOT_SERVER_URL=http://hpe-mcp-autopilot:8000/mcp
-      - JARVIS_REMEDIATION_ENABLED=${JARVIS_REMEDIATION_ENABLED:-false}
+      - FRIDAY_REMEDIATION_ENABLED=${FRIDAY_REMEDIATION_ENABLED:-}
+      - JARVIS_REMEDIATION_ENABLED=${JARVIS_REMEDIATION_ENABLED:-}
     volumes:
       - ../.claude/runbooks:/app/runbooks:ro
       - ./backend/data:/app/data

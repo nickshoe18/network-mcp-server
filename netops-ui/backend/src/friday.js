@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fridaySetting } from "./fridayConfig.js";
 
 const RUNBOOK_DIR = process.env.RUNBOOK_DIR || "/app/runbooks";
 
-export const JARVIS_MODEL = process.env.JARVIS_MODEL || "claude-sonnet-5";
+export const FRIDAY_MODEL = fridaySetting("MODEL", "claude-sonnet-5");
 
-export const JARVIS_TOOLS = [
+export const FRIDAY_TOOLS = [
   {
     name: "run_network_query",
     description:
@@ -14,7 +15,7 @@ export const JARVIS_TOOLS = [
       "Anything you print() is discarded and you will get an empty result. Tool results come wrapped, so read the payload from r['data']. " +
       "Patterns: Mist: call_tool('mist_invoke_tool', {'name': 'mist_TOOL', 'params': {...}}); UXI: call_tool('uxi_get_sensor_status', {'sensor_id': ID}); " +
       "AOS8 tests: call_tool('aos8_ping', {'dest': IP}), call_tool('aos8_traceroute', {'dest': IP}), call_tool('aos8_show_command', {...}); health: call_tool('health', {'platform': ['mist']}). " +
-      "Interactive Jarvis queries are read-only. Write, delete, restart and any 'confirmed' parameter are blocked here; unattended Level 2 actions, when eligible, go through the dedicated isolated remediation backend.",
+      "Interactive FRIDAY queries are read-only. Write, delete, restart and any 'confirmed' parameter are blocked here; unattended Level 2 actions, when eligible, go through the dedicated isolated remediation backend.",
     input_schema: {
       type: "object",
       properties: {
@@ -27,7 +28,7 @@ export const JARVIS_TOOLS = [
   {
     name: "read_runbook",
     description:
-      "Read one of Jarvis's troubleshooting runbooks by name (for example client-cannot-connect). Call with no name to list them. " +
+      "Read one of FRIDAY's troubleshooting runbooks by name (for example client-cannot-connect). Call with no name to list them. " +
       "Read the matching runbook before working a ticket.",
     input_schema: {
       type: "object",
@@ -65,18 +66,18 @@ const WRITE_VERB =
   /(?:^|_)(update|delete|create|remove|restart|reboot|release|disconnect|unauthorize|apply|manage|write|set|push|post|start|stop|clear|reset|add|assign|claim|unclaim|upgrade|move|rename|enable|disable|activate|deactivate|reprovision|snapshot|submit|import|translate)(?:_|$)/;
 
 export function checkReadOnly(code) {
-  if (/confirmed/i.test(code)) return "Blocked: Jarvis mode is read-only and cannot pass a 'confirmed' flag.";
-  if (/translate_\w+_apply/.test(code)) return "Blocked: apply/translate tools are not allowed in Jarvis mode.";
+  if (/confirmed/i.test(code)) return "Blocked: FRIDAY mode is read-only and cannot pass a 'confirmed' flag.";
+  if (/translate_\w+_apply/.test(code)) return "Blocked: apply/translate tools are not allowed in FRIDAY mode.";
   const names = code.match(/\b(?:mist|central|greenlake|clearpass|axis|aos8|uxi|apstra|edgeconnect)_[a-z0-9_]+\b/gi) || [];
   for (const n of names) {
     const lower = n.toLowerCase();
     if (ALLOWED.has(lower)) continue;
-    if (WRITE_VERB.test(lower)) return `Blocked: '${lower}' looks like a write action. Jarvis mode is read-only; escalate instead.`;
+    if (WRITE_VERB.test(lower)) return `Blocked: '${lower}' looks like a write action. FRIDAY mode is read-only; escalate instead.`;
   }
   return null;
 }
 
-export const JARVIS_SYSTEM = `You are Jarvis, the Level 2 network engineer for a lab network. You perform evidence-led diagnosis, choose the next discriminating read-only test, and either resolve a bounded operational issue or hand off a clean escalation. Interactive chat is read-only; unattended remediation is restricted to the dedicated isolated backend and its fixed action policy. The person talking to you is often on a phone, so be short, scannable, and lead with the answer.
+export const FRIDAY_SYSTEM = `You are FRIDAY, the Level 2 network engineer for a lab network. You perform evidence-led diagnosis, choose the next discriminating read-only test, and either resolve a bounded operational issue or hand off a clean escalation. Interactive chat is read-only; unattended remediation is restricted to the dedicated isolated backend and its fixed action policy. The person talking to you is often on a phone, so be short, scannable, and lead with the answer.
 
 SCOPE: the lab network only - Juniper Mist (org Stark Industries), Aruba Central, ClearPass, AOS8, UXI, GreenLake, Axis, and the LabSRX gateway. Never discuss or query any customer tenant.
 

@@ -20,7 +20,7 @@ frames arriving at the gateway -> DHCP server offering. Work top to bottom and s
 ## Prerequisites
 
 - The VLAN or network name (for example Guest, VLAN 3) and a client that is failing.
-- SRX read-only CLI available (see Jarvis prompt). All commands here are `show`.
+- SRX read-only CLI available (see FRIDAY prompt). All commands here are `show`.
 
 ## Procedure
 
@@ -85,7 +85,7 @@ temporary port override, and say it must be removed afterwards.
 
 ## Output formatting
 
-Jarvis ticket format. Findings must name the failing link (Steps 1-4) with the value you observed.
+FRIDAY ticket format. Findings must name the failing link (Steps 1-4) with the value you observed.
 
 ## Example
 

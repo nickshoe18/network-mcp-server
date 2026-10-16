@@ -159,7 +159,7 @@ export function FindingsPanel() {
       {loading ? (
         <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>Loading…</div>
       ) : findings.length === 0 ? (
-        <div style={{ fontSize: 11, color: "#444", padding: "4px 0", lineHeight: 1.5 }}>Jarvis is watching Marvis Actions. Nothing new to report yet.</div>
+        <div style={{ fontSize: 11, color: "#444", padding: "4px 0", lineHeight: 1.5 }}>FRIDAY is watching Marvis Actions. Nothing new to report yet.</div>
       ) : (
         <div>{findings.slice(0, 8).map(item => <FindingRow key={item.id + item.timestamp} item={item} onChanged={refetch} />)}</div>
       )}

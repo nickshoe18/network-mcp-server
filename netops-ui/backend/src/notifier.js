@@ -51,9 +51,9 @@ async function notifyTeams(record) {
     "@type": "MessageCard",
     "@context": "http://schema.org/extensions",
     themeColor: color,
-    summary: `Jarvis autopilot: ${t.symptom || "new finding"}`,
+    summary: `FRIDAY autopilot: ${t.symptom || "new finding"}`,
     sections: [{
-      activityTitle: "Jarvis Autopilot Finding",
+      activityTitle: "FRIDAY Autopilot Finding",
       activitySubtitle: t.entity || "",
       facts: [
         { name: "Category", value: t.category || "unknown" },
@@ -81,7 +81,7 @@ async function notifyEmail(record) {
 
   const t = record.trigger || {};
   const action = actionSummary(record);
-  const subject = `Jarvis autopilot: ${t.symptom || "new finding"} (${t.entity || "lab network"})`;
+  const subject = `FRIDAY autopilot: ${t.symptom || "new finding"} (${t.entity || "lab network"})`;
   const text = `Category: ${t.category}\nEntity: ${t.entity}\nSeverity: ${t.severity ?? "n/a"}\nSource: ${t.source}\n\n${record.finding}${action ? `\n\n${action}` : ""}`;
 
   try {

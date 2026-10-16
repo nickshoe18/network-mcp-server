@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-10-15, with Jarvis Level 2 deployed to the lab NetOps stack.
+Last updated: 2026-10-15, with FRIDAY Level 2 deployed to the lab NetOps stack.
 
 ## What this repo actually contains
 
@@ -12,15 +12,15 @@ Two architecturally separate things that happen to live together:
    server — client-agnostic. Anything that speaks MCP can connect to it (Claude Code today;
    GitHub Copilot's VS Code agent mode could too, since MCP is an open protocol, not an
    Anthropic-only thing).
-2. **Jarvis** — a Claude-specific system built *on top of* that MCP server. Two parts:
-   - An interactive Claude Code subagent (`.claude/agents/jarvis.md`) — Level 2 evidence-led
+2. **FRIDAY** — a Claude-specific system built *on top of* that MCP server. Two parts:
+   - An interactive Claude Code subagent (`.claude/agents/friday.md`) — Level 2 evidence-led
      diagnosis, read-only investigations, and bounded action guidance that honors MCP gates.
    - An autonomous "autopilot" backend (`netops-ui/backend/`) that polls Mist's Marvis Actions,
      Mist SLE, and Aruba Central alerts; runs real investigations; and can execute narrow
      confidence-gated remediation through an isolated write path.
 
 **Important distinction if anyone considers moving this to a different AI tool:** the MCP server
-is portable (point any MCP client at `http://localhost:8000/mcp`). Jarvis is not — the autopilot
+is portable (point any MCP client at `http://localhost:8000/mcp`). FRIDAY is not — the autopilot
 calls Anthropic's Messages API directly (`@anthropic-ai/sdk`, Claude-specific prompt caching,
 Claude's tool-use format) and the subagent format is Claude-Code-specific. There's no equivalent
 "swap the backend" path to GitHub Copilot or another vendor without a real rewrite — Copilot
@@ -33,13 +33,20 @@ Everything lives under `netops-ui/docker-compose.yml`. From `netops-ui/`:
 ```
 docker compose up -d --build        # bring everything up, rebuild changed images
 docker compose ps                   # check container health
-docker logs netops-backend -f       # watch Jarvis's poller + chat traffic
+docker logs netops-backend -f       # watch FRIDAY's poller + chat traffic
 ```
 
 Key services: `hpe-mcp` (main lab server, :8000), `hpe-mcp-autopilot` (isolated write-capable
 instance Stage 2 remediation actually executes through, :8005), `hpe-mcp-bobcats/jackets/
 leopards/panthers/knights` (per-customer isolated tenants, :8001-8006), `backend` (:3001, runs
 `poller.js`), `frontend` (:3000, the NetOps UI).
+
+The Jarvis-to-FRIDAY rename preserves existing settings and poller state. Use the
+`FRIDAY_*` environment-variable names; `JARVIS_*` aliases are accepted with a warning for
+this transition release only, and `FRIDAY_*` takes precedence when both are present.
+On startup, existing `jarvis_*.json` poller state is migrated to `friday_*.json` without
+overwriting. If both names of a state file exist, the poller fails closed until the conflict
+is resolved.
 
 Separately, **not** in docker-compose: a standalone Panthers channel-utilization dashboard at
 `reports-panthers/channel_monitor/`, started manually (`poller.py` + `python3 -m http.server
@@ -53,7 +60,7 @@ Separately, **not** in docker-compose: a standalone Panthers channel-utilization
   absence before declaring resolved (a single poll's absence was flickering and firing repeat
   "resolved" emails for the same still-open issue). Added a per-entity flap cooldown and an
   in-flight poll-overlap guard.
-- **Prompt caching**: every Claude call Jarvis makes was fully uncached before this — a 15-turn
+- **Prompt caching**: every Claude call FRIDAY makes was fully uncached before this — a 15-turn
   investigation re-billed its entire growing conversation every turn. `anthropicCache.js` now
   caches the system prompt, tool definitions, and growing message history.
 - **New Stage 2 action**: `release_dhcp_lease` (Mist only — `mist_release_site_device_dhcp_lease`,
@@ -64,10 +71,10 @@ Separately, **not** in docker-compose: a standalone Panthers channel-utilization
 
 See `git log` and the commit message on `86158a4` for the full detail.
 
-## Jarvis Level 2 action policy
+## FRIDAY Level 2 action policy
 
 The current Level 2 implementation keeps interactive queries read-only and adds evidence-led
-diagnosis to Jarvis's role and autopilot. The autopilot may autonomously run only one of the
+diagnosis to FRIDAY's role and autopilot. The autopilot may autonomously run only one of the
 existing seven bounded actions: locate one device LED; disconnect one client or release one
 client DHCP lease; reboot one identified, reachable device. It requires confidence >= 0.85,
 two exact supporting evidence snippets from direct read-only tool output captured within five
@@ -79,7 +86,7 @@ invalid targets or failed safety checks are blocked. Approval proposals expire a
 minutes. Each alert receives at most one action attempt; outcomes and read-only post-action
 verification are stored in the finding. Physical LED state cannot be verified via read-only
 telemetry and is reported as such. The lab NetOps stack was explicitly enabled on 2026-10-15
-(`JARVIS_REMEDIATION_ENABLED=true`) after review and acceptance of the service-impact risk of
+(`FRIDAY_REMEDIATION_ENABLED=true`) after review and acceptance of the service-impact risk of
 disconnects, lease releases, and reboots. The Compose default remains false, so other/new
 deployments require a deliberate opt-in.
 
@@ -89,7 +96,7 @@ deployments require a deliberate opt-in.
   immediately after a release-and-rescan; root cause unresolved. The Mist app itself claims fine
   — a Mist support ticket is the recommended next step if this needs solving via API.
 - `StarkTowerSW01`'s recurring disconnect pattern (6+ events) has never been root-caused.
-- Server/DHCP-reachability monitoring for Jarvis was explicitly deferred by the user until
+- Server/DHCP-reachability monitoring for FRIDAY was explicitly deferred by the user until
   Stage 0–2 were fully running and tested — they now are, so this is a reasonable next pickup.
 - Batch device claim/assignment (vs. one-at-a-time) was explicitly deferred to "the future."
 - The standalone Panthers dashboard's external-access scoping (who/what network reach beyond

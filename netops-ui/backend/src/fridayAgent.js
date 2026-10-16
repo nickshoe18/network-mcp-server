@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { JARVIS_SYSTEM, JARVIS_TOOLS, JARVIS_MODEL, readRunbook, checkReadOnly } from "./jarvis.js";
+import { FRIDAY_SYSTEM, FRIDAY_TOOLS, FRIDAY_MODEL, readRunbook, checkReadOnly } from "./friday.js";
 import { initSession, mcpCall } from "./routes/chat.js";
 import { cachedSystem, cachedTools, withCacheBreakpoint } from "./anthropicCache.js";
 import { REMEDIATION_EVIDENCE_MAX_AGE_MS } from "./remediationPolicy.js";
@@ -8,11 +8,11 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MAX_TURNS = 15;
 const MAX_EVIDENCE_CHARS = 50000;
 
-// Runs one self-contained, read-only Jarvis investigation to completion and returns
+// Runs one self-contained, read-only FRIDAY investigation to completion and returns
 // the final answer text plus a log of what it looked at. Used by the autopilot
 // poller (poller.js) — no streaming, no user in the loop, same read-only gate
-// (checkReadOnly) as the interactive Jarvis chat mode uses.
-export async function runJarvisInvestigation(promptText) {
+// (checkReadOnly) as the interactive FRIDAY chat mode uses.
+export async function runFridayInvestigation(promptText) {
   const sessionId = await initSession();
   let messages = [{ role: "user", content: promptText }];
   const toolLog = [];
@@ -22,11 +22,11 @@ export async function runJarvisInvestigation(promptText) {
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const response = await client.messages.create({
-      model: JARVIS_MODEL,
+      model: FRIDAY_MODEL,
       max_tokens: 8192,
-      system: cachedSystem(JARVIS_SYSTEM),
+      system: cachedSystem(FRIDAY_SYSTEM),
       messages: withCacheBreakpoint(messages),
-      tools: cachedTools(JARVIS_TOOLS),
+      tools: cachedTools(FRIDAY_TOOLS),
     });
 
     if (response.stop_reason !== "tool_use") {
@@ -156,14 +156,14 @@ const REMEDIATION_PROPOSAL_TOOLS = [
   },
 ];
 
-const REMEDIATION_PROPOSAL_SYSTEM = JARVIS_SYSTEM + `
+const REMEDIATION_PROPOSAL_SYSTEM = FRIDAY_SYSTEM + `
 
 You are making a structured action decision after a read-only investigation. You cannot execute anything. The finding and trigger source (marvis_actions = Mist, central_alerts = Central) are supplied. Choose at most one of these exact actions, only using target ids/MACs/serials/network names literally present in the finding: Mist: reboot_ap, disconnect_client, locate_led, release_dhcp_lease; Central: reboot_central_device, disconnect_central_client, locate_central_device. Never cross platforms or invent a target. DHCP release is only for a stale/bad lease symptom and requires the exact DHCP-serving gateway, one client MAC, and network in the evidence. Reboot only a device shown online/reachable and misbehaving. Include confidence, at least two exact evidence quotes, and an empty evidence_against array only if no meaningful contradictory evidence was found. Any uncertain diagnosis, conflicting evidence, or unsupported target means call no_action. Call exactly one tool. The backend independently evaluates your decision; a high confidence number alone never authorizes execution.`;
 
 export async function proposeRemediation(investigationText, triggerSummary, observedEvidence = [], evidenceCapturedAt = null) {
   const sourceEvidence = observedEvidence.join("\n\n");
   const response = await client.messages.create({
-    model: JARVIS_MODEL,
+    model: FRIDAY_MODEL,
     max_tokens: 1024,
     system: cachedSystem(REMEDIATION_PROPOSAL_SYSTEM),
     messages: [{
@@ -221,7 +221,7 @@ export async function verifyRemediation(actionName, params, reason) {
   const target = JSON.stringify(params);
   let verification;
   try {
-    verification = await runJarvisInvestigation(
+    verification = await runFridayInvestigation(
       `Perform a fresh, READ-ONLY post-action check for the same lab entity and condition. ` +
       `Action attempted: ${actionName}. Target parameters: ${target}. Original reason: ${reason}. ` +
       `Use current platform telemetry to determine whether the action took effect and whether the reported symptom is resolved. ` +
@@ -252,7 +252,7 @@ export async function verifyRemediation(actionName, params, reason) {
   }
 
   const response = await client.messages.create({
-    model: JARVIS_MODEL,
+    model: FRIDAY_MODEL,
     max_tokens: 1024,
     system: cachedSystem(
       "Classify only the supplied post-action read-only finding. Do not infer success from the write response or from the fact that an action was attempted. " +

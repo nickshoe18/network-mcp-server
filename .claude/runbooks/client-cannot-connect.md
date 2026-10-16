@@ -65,7 +65,7 @@ Recommendations here are generic. Never present them as root cause.
 
 ## Output formatting
 
-Use the Jarvis ticket format. Put the failing stage and the timestamped events in Findings.
+Use the FRIDAY ticket format. Put the failing stage and the timestamped events in Findings.
 
 ## Example
 

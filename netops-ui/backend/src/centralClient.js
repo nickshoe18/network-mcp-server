@@ -1,6 +1,6 @@
 import { initSession, mcpCall } from "./routes/chat.js";
 
-// Central alerts live inside the SAME hpe-mcp server Jarvis's own investigation already
+// Central alerts live inside the SAME hpe-mcp server FRIDAY's own investigation already
 // reaches (unlike Mist's Marvis Actions, which come from a separate external MCP server) —
 // so this just runs a small `execute` sandbox call through the existing session/call
 // plumbing chat.js already exports, no new MCP client or server needed.

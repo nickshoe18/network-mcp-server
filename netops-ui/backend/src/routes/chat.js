@@ -1,15 +1,16 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { JARVIS_SYSTEM, JARVIS_TOOLS, JARVIS_MODEL, readRunbook, checkReadOnly } from "../jarvis.js";
+import { FRIDAY_SYSTEM, FRIDAY_TOOLS, FRIDAY_MODEL, readRunbook, checkReadOnly } from "../friday.js";
 import { cachedSystem, cachedTools, withCacheBreakpoint } from "../anthropicCache.js";
 
 export const chatRouter = Router();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MCP_URL = process.env.MCP_SERVER_URL || "http://hpe-mcp:8000/mcp";
 const MAX_TURNS = 25;
+let warnedLegacyMode = false;
 
 // ── MCP session management ────────────────────────────────────────────────────
-// Exported so jarvisAgent.js (the autopilot poller's investigation runner) can
+// Exported so fridayAgent.js (the autopilot poller's investigation runner) can
 // reuse the exact same session/call plumbing instead of a second implementation.
 export async function initSession() {
   const resp = await fetch(MCP_URL, {
@@ -110,13 +111,18 @@ chatRouter.post("/", async (req, res) => {
   if (!messages || !Array.isArray(messages))
     return res.status(400).json({ error: "messages array required" });
 
-  const jarvis = req.body.mode === "jarvis" || req.remote === true;
-  const model = jarvis ? JARVIS_MODEL : "claude-sonnet-4-5";
-  const system = cachedSystem(jarvis ? JARVIS_SYSTEM : ASSISTANT_SYSTEM);
-  const tools = cachedTools(jarvis ? JARVIS_TOOLS : TOOLS);
-  const maxTokens = jarvis ? 8192 : 4096;
+  const legacyMode = req.body.mode === "jarvis";
+  if (legacyMode && !warnedLegacyMode) {
+    console.warn("[chat] mode 'jarvis' is deprecated; use 'friday'.");
+    warnedLegacyMode = true;
+  }
+  const friday = req.body.mode === "friday" || legacyMode || req.remote === true;
+  const model = friday ? FRIDAY_MODEL : "claude-sonnet-4-5";
+  const system = cachedSystem(friday ? FRIDAY_SYSTEM : ASSISTANT_SYSTEM);
+  const tools = cachedTools(friday ? FRIDAY_TOOLS : TOOLS);
+  const maxTokens = friday ? 8192 : 4096;
 
-  res.setHeader("X-Netops-Mode", jarvis ? "jarvis" : "assistant");
+  res.setHeader("X-Netops-Mode", friday ? "friday" : "assistant");
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -155,10 +161,10 @@ chatRouter.post("/", async (req, res) => {
 
         try {
           let resultText;
-          if (jarvis && toolUse.name === "read_runbook") {
+          if (friday && toolUse.name === "read_runbook") {
             resultText = readRunbook(toolUse.input.name);
           } else {
-            const blocked = jarvis ? checkReadOnly(toolUse.input.code || "") : null;
+            const blocked = friday ? checkReadOnly(toolUse.input.code || "") : null;
             if (blocked) {
               toolResults.push({
                 type: "tool_result",

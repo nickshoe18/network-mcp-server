@@ -65,7 +65,7 @@ independently of Mist.
 
 ## Output formatting
 
-Jarvis ticket format; state the scope (all vs one network) in the first Findings bullet.
+FRIDAY ticket format; state the scope (all vs one network) in the first Findings bullet.
 
 ## Example
 

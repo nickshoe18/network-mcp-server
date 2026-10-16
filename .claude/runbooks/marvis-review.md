@@ -65,4 +65,4 @@ Needs a human: - item (why)   [or "nothing"]
 
 ## Example
 
-> "Jarvis, any Marvis alerts?"
+> "FRIDAY, any Marvis alerts?"

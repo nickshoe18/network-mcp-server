@@ -70,4 +70,4 @@ Keep it to this block. Add detail only when asked.
 
 ## Example
 
-> "Jarvis, status update."
+> "FRIDAY, status update."

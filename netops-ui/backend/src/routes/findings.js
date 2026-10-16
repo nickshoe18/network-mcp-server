@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getFindings, updateFinding } from "../poller.js";
 import { executeRemediation, remediationEnabled } from "../remediation.js";
-import { verifyRemediation } from "../jarvisAgent.js";
+import { verifyRemediation } from "../fridayAgent.js";
 import { evaluateRemediation, REMEDIATION_EVIDENCE_MAX_AGE_MS } from "../remediationPolicy.js";
 import { executeAndVerify } from "../remediationLifecycle.js";
 
@@ -23,7 +23,7 @@ findingsRouter.post("/:id/approve", async (req, res) => {
   const proposal = finding.proposedAction;
   if (!proposal) return res.status(400).json({ ok: false, error: "this finding has no proposed action" });
   if (proposal.status !== "pending") return res.status(409).json({ ok: false, error: `already ${proposal.status}` });
-  if (!remediationEnabled()) return res.status(403).json({ ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true) — nothing will execute" });
+  if (!remediationEnabled()) return res.status(403).json({ ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true) — nothing will execute" });
 
   const createdAt = Date.parse(proposal.createdAt || finding.timestamp);
   if (!Number.isFinite(createdAt) || Date.now() - createdAt > MAX_PROPOSAL_AGE_MS) {

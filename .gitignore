@@ -7,7 +7,7 @@ secrets-*/
 # Real customer data pulls (client lists, reports, etc.) — never commit
 reports-*/
 
-# NetOps backend runtime state (Jarvis autopilot findings/dedup state) — generated, not source
+# NetOps backend runtime state (FRIDAY autopilot findings/dedup state) — generated, not source
 netops-ui/backend/data/
 
 # Python

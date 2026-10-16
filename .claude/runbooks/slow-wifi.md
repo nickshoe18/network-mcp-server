@@ -58,7 +58,7 @@ problem rather than one client's.
 
 ## Output formatting
 
-Jarvis ticket format with the SLE values and radio numbers in Findings.
+FRIDAY ticket format with the SLE values and radio numbers in Findings.
 
 ## Example
 

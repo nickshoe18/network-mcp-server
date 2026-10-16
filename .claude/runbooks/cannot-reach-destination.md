@@ -20,7 +20,7 @@ Decide which hop drops the traffic: source client, path to the gateway, gateway 
 ## Prerequisites
 
 - Source IP and network, destination IP and network, protocol/port, and the exact failure (timeout vs refused).
-- SRX read-only CLI (see Jarvis prompt). To test, use the "Active tests" methods in the Jarvis prompt: the
+- SRX read-only CLI (see FRIDAY prompt). To test, use the "Active tests" methods in the FRIDAY prompt: the
   `.claude/tools/mist_device_cmd.py` helper for ping/traceroute from the switch, AP or gateway, or `ping` on the
   SRX CLI. The Mist MCP ping tools themselves return output only over a websocket and are not usable directly.
 
@@ -85,7 +85,7 @@ must use `custom` entries, not `allowed_services`. Both are escalations.
 
 ## Output formatting
 
-Jarvis ticket format; Findings names the hop where it stops.
+FRIDAY ticket format; Findings names the hop where it stops.
 
 ## Example
 

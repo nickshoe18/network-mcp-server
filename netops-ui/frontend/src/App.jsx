@@ -7,13 +7,20 @@ import { usePlatformHealth } from "./hooks/usePlatformHealth.js";
 
 export default function App() {
   const [mode, setMode] = useState(() => {
-    try { return localStorage.getItem("netops-mode") === "jarvis" ? "jarvis" : "assistant"; } catch { return "assistant"; }
+    try {
+      const storedMode = localStorage.getItem("netops-mode");
+      if (storedMode === "jarvis") {
+        localStorage.setItem("netops-mode", "friday");
+        return "friday";
+      }
+      return storedMode === "friday" ? "friday" : "assistant";
+    } catch { return "assistant"; }
   });
   const [remote, setRemote] = useState(false);
   useEffect(() => {
     fetch("/api/whoami").then(r => r.json()).then(d => setRemote(!!d.remote)).catch(() => {});
   }, []);
-  const effectiveMode = remote ? "jarvis" : mode;
+  const effectiveMode = remote ? "friday" : mode;
   const { messages, streaming, activeTools, send, clear } = useChat(effectiveMode);
   const { platforms, loading } = usePlatformHealth(30000);
   const changeMode = (m) => {

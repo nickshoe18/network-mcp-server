@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { fridaySetting } from "./fridayConfig.js";
 
 // Dedicated, isolated MCP instance (hpe-mcp-autopilot in docker-compose.yml) — separate
 // from MCP_SERVER_URL, which stays used for all read-only investigation. Only this client
@@ -7,10 +8,10 @@ const AUTOPILOT_MCP_URL = process.env.MCP_AUTOPILOT_SERVER_URL || "http://hpe-mc
 const HDR = { "Content-Type": "application/json", "Accept": "application/json, text/event-stream" };
 
 // Master switch. Defaults OFF — building this does not make it live. Someone has to
-// deliberately set JARVIS_REMEDIATION_ENABLED=true for the autopilot to ever execute
+// deliberately set FRIDAY_REMEDIATION_ENABLED=true for the autopilot to ever execute
 // anything; until then every action call below refuses before it would touch the network.
 export function remediationEnabled() {
-  return (process.env.JARVIS_REMEDIATION_ENABLED ?? "false") === "true";
+  return fridaySetting("REMEDIATION_ENABLED", "false") === "true";
 }
 
 let sessionId = null;
@@ -66,21 +67,21 @@ function auditLog(action, params, result) {
 // ── The 7 approved actions — each takes exactly the ids it names, nothing else ──
 
 export async function rebootAp(site_id, device_id) {
-  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true)" };
   const result = await callWriteTool("mist_restart_site_device", { site_id, device_id });
   auditLog("reboot_ap", { site_id, device_id }, result);
   return result;
 }
 
 export async function disconnectClient(site_id, client_mac) {
-  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true)" };
   const result = await callWriteTool("mist_disconnect_site_wireless_client", { site_id, client_mac });
   auditLog("disconnect_client", { site_id, client_mac }, result);
   return result;
 }
 
 export async function setLocateLed(site_id, device_id, enabled) {
-  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true)" };
   const tool = enabled ? "mist_start_site_locate_device" : "mist_stop_site_locate_device";
   const result = await callWriteTool(tool, { site_id, device_id });
   auditLog(enabled ? "locate_led_start" : "locate_led_stop", { site_id, device_id }, result);
@@ -90,9 +91,9 @@ export async function setLocateLed(site_id, device_id, enabled) {
 // Request shape confirmed against the real OpenAPI spec (schema utils_release_dhcp_leases,
 // bundled spec_index.db) — `macs` + `network` releases exactly the named client leases on
 // that network, scoped to one gateway device; `port_id` alone (not used here) would release
-// every lease on a port instead, which is broader than Jarvis should ever propose.
+// every lease on a port instead, which is broader than FRIDAY should ever propose.
 export async function releaseDhcpLease(site_id, device_id, macs, network) {
-  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true)" };
   const result = await callWriteTool("mist_release_site_device_dhcp_lease", { site_id, device_id, macs, network });
   auditLog("release_dhcp_lease", { site_id, device_id, macs, network }, result);
   return result;
@@ -104,7 +105,7 @@ export async function releaseDhcpLease(site_id, device_id, macs, network) {
 // central_get_tool_schema), so these take that shape instead.
 
 export async function rebootCentralDevice(device_family, serial_number) {
-  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true)" };
   const result = await callWriteTool("central_reboot_device", { device_family, serial_number });
   auditLog("reboot_central_device", { device_family, serial_number }, result);
   return result;
@@ -115,7 +116,7 @@ export async function rebootCentralDevice(device_family, serial_number) {
 // central_get_tool_schema: user_mac_address on an AP, mac_address + device_type on a
 // switch, client_mac_address on a gateway).
 export async function disconnectCentralClient(device_kind, serial_number, mac, switch_type) {
-  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true)" };
   let tool, params;
   if (device_kind === "ap") { tool = "central_disconnect_user_by_mac_on_ap"; params = { serial_number, user_mac_address: mac }; }
   else if (device_kind === "switch") { tool = "central_disconnect_client_switch"; params = { serial_number, device_type: switch_type, mac_address: mac }; }
@@ -128,7 +129,7 @@ export async function disconnectCentralClient(device_kind, serial_number, mac, s
 }
 
 export async function locateCentralDevice(device_family, serial_number) {
-  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+  if (!remediationEnabled()) return { ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true)" };
   const result = await callWriteTool("central_locate_device", { device_family, serial_number });
   auditLog("locate_central_device", { device_family, serial_number }, result);
   return result;
@@ -136,7 +137,7 @@ export async function locateCentralDevice(device_family, serial_number) {
 
 export async function executeRemediation(name, params = {}) {
   if (!remediationEnabled()) {
-    return { ok: false, error: "remediation disabled (JARVIS_REMEDIATION_ENABLED != true)" };
+    return { ok: false, error: "remediation disabled (FRIDAY_REMEDIATION_ENABLED != true)" };
   }
   if (name === "reboot_ap") return rebootAp(params.site_id, params.device_id);
   if (name === "disconnect_client") return disconnectClient(params.site_id, params.client_mac);

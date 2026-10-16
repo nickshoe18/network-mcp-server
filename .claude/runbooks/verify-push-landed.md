@@ -61,7 +61,7 @@ module is disconnected). Escalate with the timestamps.
 
 ## Output formatting
 
-Jarvis ticket format. State plainly: "queued / committed / confirmed live / reverted", with timestamps.
+FRIDAY ticket format. State plainly: "queued / committed / confirmed live / reverted", with timestamps.
 
 ## Example
 

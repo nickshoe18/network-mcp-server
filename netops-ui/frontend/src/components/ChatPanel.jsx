@@ -33,7 +33,7 @@ function Message({ msg, activeTools }) {
   );
 }
 
-const JARVIS_STARTERS = [
+const FRIDAY_STARTERS = [
   "Status update",
   "Any Marvis alerts?",
   "Where is device 10.103.10.10?",
@@ -44,7 +44,7 @@ function ModeToggle({ mode, onModeChange, disabled, remote }) {
   if (remote) {
     return (
       <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 20px", borderBottom: "1px solid #2a2d3a", background: "#161820" }}>
-        <span style={{ padding: "5px 14px", fontSize: 12, borderRadius: 6, background: "#1B8C6E", color: "#fff" }}>Jarvis</span>
+        <span style={{ padding: "5px 14px", fontSize: 12, borderRadius: 6, background: "#1B8C6E", color: "#fff" }}>FRIDAY</span>
         <span style={{ fontSize: 11, color: "#555" }}>Remote session · read-only</span>
       </div>
     );
@@ -52,16 +52,16 @@ function ModeToggle({ mode, onModeChange, disabled, remote }) {
   const btn = (m, label) => (
     <button onClick={() => onModeChange(m)} disabled={disabled}
       style={{ padding: "5px 14px", fontSize: 12, borderRadius: 6, border: "1px solid #2a2d3a", cursor: disabled ? "default" : "pointer",
-        background: mode === m ? (m === "jarvis" ? "#1B8C6E" : "#1B4F8A") : "#1e2030", color: mode === m ? "#fff" : "#888" }}>
+        background: mode === m ? (m === "friday" ? "#1B8C6E" : "#1B4F8A") : "#1e2030", color: mode === m ? "#fff" : "#888" }}>
       {label}
     </button>
   );
   return (
     <div style={{ display: "flex", gap: 6, alignItems: "center", padding: "8px 20px", borderBottom: "1px solid #2a2d3a", background: "#161820" }}>
       {btn("assistant", "Assistant")}
-      {btn("jarvis", "Jarvis")}
+      {btn("friday", "FRIDAY")}
       <span style={{ fontSize: 11, color: "#555", marginLeft: 8 }}>
-        {mode === "jarvis" ? "Level 2 engineer · evidence-led · interactive read-only" : "General network assistant"}
+        {mode === "friday" ? "Level 2 engineer · evidence-led · interactive read-only" : "General network assistant"}
       </span>
     </div>
   );
@@ -70,7 +70,7 @@ function ModeToggle({ mode, onModeChange, disabled, remote }) {
 export function ChatPanel({ messages, streaming, activeTools, onSend, mode = "assistant", onModeChange = () => {}, remote = false }) {
   const bottomRef = useRef(null);
   const [input, setInput] = useState("");
-  const isJarvis = mode === "jarvis";
+  const isFriday = mode === "friday";
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, activeTools]);
 
@@ -85,20 +85,20 @@ export function ChatPanel({ messages, streaming, activeTools, onSend, mode = "as
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <ModeToggle mode={mode} onModeChange={onModeChange} disabled={streaming} remote={remote} />
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
-        {messages.length === 0 && !isJarvis && (
+        {messages.length === 0 && !isFriday && (
           <div style={{ textAlign: "center", marginTop: 80, color: "#444" }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⬡</div>
             <div style={{ fontSize: 14, marginBottom: 6, color: "#666" }}>HPE Network Operations</div>
             <div style={{ fontSize: 12 }}>Ask anything about your network infrastructure</div>
           </div>
         )}
-        {messages.length === 0 && isJarvis && (
+        {messages.length === 0 && isFriday && (
           <div style={{ textAlign: "center", marginTop: 60, color: "#444" }}>
             <div style={{ fontSize: 32, marginBottom: 12, color: "#1B8C6E" }}>◈</div>
-            <div style={{ fontSize: 14, marginBottom: 6, color: "#8ab" }}>Jarvis · Level 2 Network Engineer</div>
+            <div style={{ fontSize: 14, marginBottom: 6, color: "#8ab" }}>FRIDAY · Level 2 Network Engineer</div>
             <div style={{ fontSize: 12, marginBottom: 18 }}>Evidence-led, read-only diagnosis. The alert autopilot can take bounded actions only when confidence and safety gates pass. Ask for a status update or describe a problem.</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 520, margin: "0 auto" }}>
-              {JARVIS_STARTERS.map(s => (
+              {FRIDAY_STARTERS.map(s => (
                 <button key={s} onClick={() => onSend(s)} disabled={streaming}
                   style={{ padding: "7px 12px", fontSize: 12, borderRadius: 16, border: "1px solid #2a2d3a", background: "#1e2030", color: "#9aa", cursor: "pointer" }}>{s}</button>
               ))}
@@ -113,7 +113,7 @@ export function ChatPanel({ messages, streaming, activeTools, onSend, mode = "as
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end", background: "#1e2030", borderRadius: 10, border: "1px solid #2a2d3a", padding: "8px 12px" }}>
           <textarea value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
-            placeholder={isJarvis ? "Ask Jarvis — e.g. status update, or describe a problem…" : "Ask about your network…"} rows={1}
+            placeholder={isFriday ? "Ask FRIDAY — e.g. status update, or describe a problem…" : "Ask about your network…"} rows={1}
             style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#e8eaf0", fontSize: 13, resize: "none", fontFamily: "inherit", lineHeight: 1.5 }} />
           <button onClick={submit} disabled={!input.trim() || streaming}
             style={{ width: 30, height: 30, borderRadius: 6, background: input.trim() && !streaming ? "#1B4F8A" : "#2a2d3a", border: "none", cursor: input.trim() && !streaming ? "pointer" : "default", color: "#fff", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

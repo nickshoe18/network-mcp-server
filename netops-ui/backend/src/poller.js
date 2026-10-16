@@ -2,44 +2,46 @@ import fs from "node:fs";
 import path from "node:path";
 import { getActiveMarvisActions, getSleBreaches, marvisConfigured } from "./marvisClient.js";
 import { getSiteAlerts, severityScore } from "./centralClient.js";
-import { runJarvisInvestigation, proposeRemediation, verifyRemediation } from "./jarvisAgent.js";
+import { runFridayInvestigation, proposeRemediation, verifyRemediation } from "./fridayAgent.js";
 import { executeRemediation, remediationEnabled } from "./remediation.js";
 import { evaluateRemediation } from "./remediationPolicy.js";
 import { executeAndVerify, hasPreviousActionAttempt, preserveLatestActionState } from "./remediationLifecycle.js";
 import { notify } from "./notifier.js";
+import { fridaySetting } from "./fridayConfig.js";
+import { migrateFridayStateFiles } from "./fridayState.js";
 
-const DATA_DIR = process.env.JARVIS_DATA_DIR || "/app/data";
-const SEEN_FILE = path.join(DATA_DIR, "jarvis_seen_actions.json");
-const SEEN_SLE_FILE = path.join(DATA_DIR, "jarvis_seen_sle.json");
-const ACTIVE_SNAPSHOT_FILE = path.join(DATA_DIR, "jarvis_active_snapshot.json");
-const PENDING_RESOLUTION_FILE = path.join(DATA_DIR, "jarvis_pending_resolution.json");
-const ENTITY_ALERT_FILE = path.join(DATA_DIR, "jarvis_entity_last_alert.json");
-const CENTRAL_SEEN_FILE = path.join(DATA_DIR, "jarvis_seen_central_alerts.json");
-const CENTRAL_ACTIVE_SNAPSHOT_FILE = path.join(DATA_DIR, "jarvis_central_active_snapshot.json");
-const CENTRAL_PENDING_RESOLUTION_FILE = path.join(DATA_DIR, "jarvis_central_pending_resolution.json");
-const FINDINGS_FILE = path.join(DATA_DIR, "jarvis_findings.json");
+const DATA_DIR = fridaySetting("DATA_DIR", "/app/data");
+const SEEN_FILE = path.join(DATA_DIR, "friday_seen_actions.json");
+const SEEN_SLE_FILE = path.join(DATA_DIR, "friday_seen_sle.json");
+const ACTIVE_SNAPSHOT_FILE = path.join(DATA_DIR, "friday_active_snapshot.json");
+const PENDING_RESOLUTION_FILE = path.join(DATA_DIR, "friday_pending_resolution.json");
+const ENTITY_ALERT_FILE = path.join(DATA_DIR, "friday_entity_last_alert.json");
+const CENTRAL_SEEN_FILE = path.join(DATA_DIR, "friday_seen_central_alerts.json");
+const CENTRAL_ACTIVE_SNAPSHOT_FILE = path.join(DATA_DIR, "friday_central_active_snapshot.json");
+const CENTRAL_PENDING_RESOLUTION_FILE = path.join(DATA_DIR, "friday_central_pending_resolution.json");
+const FINDINGS_FILE = path.join(DATA_DIR, "friday_findings.json");
 const MAX_FINDINGS = 50;
 
-const POLL_INTERVAL_MS = Number(process.env.JARVIS_POLL_INTERVAL_MS || 120000);
+const POLL_INTERVAL_MS = Number(fridaySetting("POLL_INTERVAL_MS", 120000));
 // SLE breach episodes: Mist's "hourly" bucket boundary doesn't actually stay fixed
 // between polls (it was observed shifting every ~2 minutes), so deduping by bucket id
 // re-alerted on every single poll cycle for one ongoing condition. Instead we track
 // one open episode per metric: alert once when it starts, stay quiet while it's
 // still the same episode, send at most one reminder per cooldown window if it drags
 // on, and send one resolution alert when it clears — same shape as Marvis actions.
-const SLE_EPISODE_GAP_MS = Number(process.env.JARVIS_SLE_EPISODE_GAP_MS || 90 * 60 * 1000); // gap bigger than this = new episode, not a continuation
-const SLE_RENOTIFY_COOLDOWN_MS = Number(process.env.JARVIS_SLE_RENOTIFY_COOLDOWN_MS || 4 * 60 * 60 * 1000); // reminder cadence for a still-ongoing episode
+const SLE_EPISODE_GAP_MS = Number(fridaySetting("SLE_EPISODE_GAP_MS", 90 * 60 * 1000)); // gap bigger than this = new episode, not a continuation
+const SLE_RENOTIFY_COOLDOWN_MS = Number(fridaySetting("SLE_RENOTIFY_COOLDOWN_MS", 4 * 60 * 60 * 1000)); // reminder cadence for a still-ongoing episode
 // Marvis's "active actions" list has been observed to drop an action for a single poll
 // and then list it again right after — treating one missed poll as "resolved" fired a
 // fresh investigation + email every time that happened, repeatedly, for the same still-
 // open issue. Require the action to be absent for this many consecutive polls before
 // treating it as genuinely resolved.
-const RESOLUTION_CONFIRM_POLLS = Number(process.env.JARVIS_RESOLUTION_CONFIRM_POLLS || 2);
+const RESOLUTION_CONFIRM_POLLS = Number(fridaySetting("RESOLUTION_CONFIRM_POLLS", 2));
 // If the same entity (device) throws another new Marvis action within this window of its
 // last alert, it's flapping, not a new independent problem — skip the costly investigation
 // and email, and just leave a cheap pointer back at the earlier ticket.
-const ENTITY_ALERT_COOLDOWN_MS = Number(process.env.JARVIS_ENTITY_ALERT_COOLDOWN_MS || 30 * 60 * 1000);
-const ENABLED = (process.env.JARVIS_AUTOPILOT_ENABLED ?? "true") !== "false";
+const ENTITY_ALERT_COOLDOWN_MS = Number(fridaySetting("ENTITY_ALERT_COOLDOWN_MS", 30 * 60 * 1000));
+const ENABLED = (fridaySetting("AUTOPILOT_ENABLED", "true")) !== "false";
 const MIST_ORG_ID = process.env.MIST_ORG_ID || "5f24e447-1145-4efa-94e0-ccec1a2a00a7"; // Stark Industries (lab)
 const MIST_SITE_ID = process.env.MIST_SITE_ID || "59f74351-5c94-49bf-adea-dc96f4b132bf"; // Stark Tower (lab)
 // Lab Central sites to poll for alerts — Hall of Justice + Bat Cave. Sandbox Testing is
@@ -47,10 +49,6 @@ const MIST_SITE_ID = process.env.MIST_SITE_ID || "59f74351-5c94-49bf-adea-dc96f4
 // alert there.
 const CENTRAL_SITE_IDS = (process.env.CENTRAL_SITE_IDS || "44056656981,791595406")
   .split(",").map(s => s.trim()).filter(Boolean);
-
-function ensureDataDir() {
-  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
-}
 
 function loadJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -80,7 +78,7 @@ async function investigateAndRecord(prompt, trigger, findings, offerAction = fal
   console.log(`[poller] investigating: ${trigger.symptom}`);
   let result;
   try {
-    result = await runJarvisInvestigation(prompt);
+    result = await runFridayInvestigation(prompt);
   } catch (e) {
     console.error("[poller] investigation failed:", e.message);
     result = { text: `Investigation failed to run: ${e.message}`, toolLog: [] };
@@ -136,7 +134,7 @@ async function investigateAndRecord(prompt, trigger, findings, offerAction = fal
           record.actionDecision = {
             status: record.proposedAction.status,
             reason: previousAttempt && eligibility.autonomousEligible
-              ? "An action was already attempted for this alert; Jarvis will not retry it."
+              ? "An action was already attempted for this alert; FRIDAY will not retry it."
               : eligibility.reason,
             checks: eligibility.checks,
           };
@@ -182,7 +180,7 @@ async function investigateAndRecord(prompt, trigger, findings, offerAction = fal
 }
 
 // Marvis dropping an action off its active list is the trigger, not the confirmation —
-// this runs a real Jarvis investigation to independently verify the entity is actually
+// this runs a real FRIDAY investigation to independently verify the entity is actually
 // healthy now (not just that Marvis stopped complaining), same ticket format as the
 // original alert, explicitly referencing it for continuity.
 async function investigateResolution(id, findings) {
@@ -499,7 +497,7 @@ export function persistFindings(findings) {
       if (cleanupError.code !== "ENOENT") console.error(`[poller] failed to remove ${temporaryFile}:`, cleanupError.message);
     }
     console.error(`[poller] failed to persist ${FINDINGS_FILE}:`, error.message);
-    throw new Error("Failed to persist Jarvis findings; refusing to run or approve remediation.");
+    throw new Error("Failed to persist FRIDAY findings; refusing to run or approve remediation.");
   }
 }
 
@@ -535,10 +533,10 @@ async function pollOnceGuarded() {
 
 export function start() {
   if (!ENABLED) {
-    console.log("[poller] JARVIS_AUTOPILOT_ENABLED=false — autopilot disabled");
+    console.log("[poller] FRIDAY_AUTOPILOT_ENABLED=false — autopilot disabled");
     return;
   }
-  ensureDataDir();
+  migrateFridayStateFiles(DATA_DIR);
   if (!marvisConfigured()) {
     console.log("[poller] Marvis header file not found — marvis_actions/sle will stay idle until it's mounted (central_alerts is unaffected)");
   }

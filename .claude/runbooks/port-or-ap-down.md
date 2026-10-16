@@ -82,7 +82,7 @@ never run it on the uplink port (`ge-0/0/46-47`).
 
 ## Output formatting
 
-Jarvis ticket format with the port/device values and timestamps in Findings.
+FRIDAY ticket format with the port/device values and timestamps in Findings.
 
 ## Example
 

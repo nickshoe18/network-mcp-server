@@ -62,7 +62,7 @@ read here. Infer reachability from whether requests appear in ClearPass or Mist 
 
 ## Output formatting
 
-Jarvis ticket format; quote the exact rejection or event text.
+FRIDAY ticket format; quote the exact rejection or event text.
 
 ## Example
 
